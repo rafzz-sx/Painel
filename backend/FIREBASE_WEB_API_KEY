@@ -1,0 +1,17 @@
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyCnW66N3_jW3yj2PMTOvB3HvRQKT5jDwqQ",
+  authDomain: "corretor-imoveis-89afb.firebaseapp.com",
+  projectId: "corretor-imoveis-89afb",
+  storageBucket: "corretor-imoveis-89afb.firebasestorage.app",
+  messagingSenderId: "912091350311",
+  appId: "1:912091350311:web:5692e58f5b5f48f6ccd502"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);

@@ -1,0 +1,13 @@
+{
+  "appId": "com.paineldados.app",
+  "appName": "Painel de Dados",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    }
+  }
+}
