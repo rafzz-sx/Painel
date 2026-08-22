@@ -19,21 +19,60 @@ FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY")
 ADMIN_EMAIL = (os.getenv("ADMIN_EMAIL") or "").strip().lower()
 
 
+def _load_service_account_info():
+    """Credencial Admin do Firebase (NÃO é a Web API Key)."""
+    raw = (os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
+    if raw:
+        if (raw.startswith("'") and raw.endswith("'")) or (raw.startswith('"') and raw.endswith('"') and raw.count('{') == 0):
+            raw = raw[1:-1]
+        try:
+            info = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "FIREBASE_SERVICE_ACCOUNT_JSON não é um JSON válido. "
+                "Cole o conteúdo inteiro do serviceAccountKey.json (incluindo { }). "
+                f"Detalhe: {exc}"
+            ) from exc
+        if info.get("private_key"):
+            info["private_key"] = str(info["private_key"]).replace("\\n", "\n")
+        return info
+
+    private_key = (os.getenv("FIREBASE_PRIVATE_KEY") or "").replace("\\n", "\n").strip()
+    client_email = (os.getenv("FIREBASE_CLIENT_EMAIL") or "").strip()
+    project_id = (os.getenv("FIREBASE_PROJECT_ID") or "").strip()
+    if private_key and client_email and project_id:
+        return {
+            "type": "service_account",
+            "project_id": project_id,
+            "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID", ""),
+            "private_key": private_key,
+            "client_email": client_email,
+            "client_id": os.getenv("FIREBASE_CLIENT_ID", ""),
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        }
+
+    key_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or "serviceAccountKey.json"
+    if os.path.exists(key_path):
+        with open(key_path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    return None
+
+
 def init_firebase():
     if firebase_admin._apps:
         return
-    raw_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
-    key_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or "serviceAccountKey.json"
-    if raw_json:
-        cred = credentials.Certificate(json.loads(raw_json))
-    elif os.path.exists(key_path):
-        cred = credentials.Certificate(key_path)
-    else:
+    info = _load_service_account_info()
+    if not info:
         raise RuntimeError(
-            "Firebase não configurado. Defina FIREBASE_SERVICE_ACCOUNT_JSON "
-            "ou coloque serviceAccountKey.json na pasta backend."
+            "Firebase Admin não configurado no Render. "
+            "FIREBASE_WEB_API_KEY (Web API Key) NÃO serve para isso. "
+            "No Render → Environment, defina FIREBASE_SERVICE_ACCOUNT_JSON "
+            "com o JSON inteiro de backend/serviceAccountKey.json "
+            "OU as variáveis FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY."
         )
-    firebase_admin.initialize_app(cred)
+    firebase_admin.initialize_app(credentials.Certificate(info))
 
 
 init_firebase()
@@ -48,7 +87,8 @@ app = FastAPI(title="Painel de Dados API")
 
 _default_origins = (
     "http://localhost:5173,http://127.0.0.1:5173,"
-    "http://localhost,capacitor://localhost,https://localhost"
+    "http://localhost,capacitor://localhost,https://localhost,"
+    "https://painel-25xg-silk.vercel.app,https://painel-y9f9.onrender.com"
 )
 origin_list = [
     item.strip()
