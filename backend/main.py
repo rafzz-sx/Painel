@@ -9,7 +9,7 @@ from firebase_admin import credentials, auth, firestore
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from dotenv import load_dotenv
 from search import AVAILABLE_APIS, DEFAULT_SOURCES, run_search
 
@@ -371,6 +371,36 @@ async def health():
         "firebase_key": bool(FIREBASE_WEB_API_KEY),
         "admin_configured": bool(ADMIN_EMAIL),
     })
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    site = os.getenv("FRONTEND_URL", "https://painel-25xg-silk.vercel.app").rstrip("/")
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Painel de Dados — API</title>
+  <style>
+    body {{ margin:0; min-height:100vh; display:grid; place-items:center;
+      font-family: Inter, system-ui, sans-serif; background:#070B12; color:#E8EEF7; }}
+    .card {{ max-width: 28rem; padding: 2rem; border: 1px solid rgba(58,167,255,.25);
+      border-radius: 1.25rem; background: rgba(15,22,34,.8); }}
+    a {{ color:#3AA7FF; }}
+    p {{ color:#8492A6; line-height:1.5; }}
+    code {{ color:#FFB648; font-size: .85rem; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Esta URL é a API</h1>
+    <p>O site do painel não fica no Render. Abra o frontend na Vercel:</p>
+    <p><a href="{site}">{site}</a></p>
+    <p>Teste da API: <a href="/health"><code>/health</code></a></p>
+  </div>
+</body>
+</html>"""
 
 
 @app.post("/log")
