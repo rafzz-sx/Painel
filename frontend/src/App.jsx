@@ -129,6 +129,8 @@ function describeLoginError(error) {
     return 'Rota não encontrada no servidor. Reinicie o backend (python main.py) para carregar as rotas novas.';
   }
   if (error.response.status === 401) {
+    const detail = error.response.data?.detail;
+    if (typeof detail === 'string' && detail !== 'INVALID_LOGIN_CREDENTIALS') return detail;
     return 'E-mail ou senha incorretos.';
   }
   if (error.response.status === 409) {
@@ -399,35 +401,8 @@ function App() {
     if (Array.isArray(data.enabled_apis)) {
       setEnabledApis(data.enabled_apis);
     }
-    setIsTransitioning(true);
-
-    gsap.to(cardRef.current, {
-      scale: 1.04,
-      opacity: 0,
-      duration: 0.45,
-      ease: 'power2.in',
-      onComplete: () => {
-        gsap.fromTo(
-          transitionRef.current,
-          { opacity: 0 },
-          {
-            opacity: 1,
-            duration: 0.3,
-            onComplete: () => {
-              setIsLogged(true);
-              setTimeout(() => {
-                gsap.to(transitionRef.current, {
-                  opacity: 0,
-                  duration: 0.5,
-                  delay: 0.4,
-                  onComplete: () => setIsTransitioning(false),
-                });
-              }, 600);
-            },
-          }
-        );
-      },
-    });
+    setIsLogged(true);
+    setIsTransitioning(false);
 
     axios
       .post(`${API}/log`, { user_id: data.user, action: 'login' })
@@ -439,7 +414,7 @@ function App() {
     setLoginError('');
     setIsLoggingIn(true);
     try {
-      const response = await axios.post(`${API}/login`, { email, password });
+      const response = await axios.post(`${API}/login`, { email, password }, { timeout: 90000 });
       completeLogin(response.data);
     } catch (error) {
       setLoginError(describeLoginError(error));
@@ -700,8 +675,8 @@ function App() {
             </div>
           </div>
 
-          <p className="text-center text-[11px] text-ink-faint font-mono mt-5 tracking-wide">
-            acesso monitorado · v1.0
+          <p className="text-center text-[11px] text-ink-faint font-mono mt-5 tracking-wide break-all px-2">
+            api · {API}
           </p>
         </div>
       </div>
