@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { gsap } from 'gsap';
 import axios from 'axios';
-import { API } from './api';
+import { API, startKeepAlive, stopKeepAlive } from './api';
 import AdminDashboard from './AdminDashboard';
 
 const DEFAULT_APIS = [
@@ -113,19 +113,41 @@ const IconGrid = (props) => (
   </svg>
 );
 
+const IconInfo = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...IconBase} {...props}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 16v-4" />
+    <path d="M12 8h.01" />
+  </svg>
+);
+
+const IconApi = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...IconBase} {...props}>
+    <path d="M4 6h16M4 12h16M4 18h16" />
+    <circle cx="8" cy="6" r="1.5" fill="currentColor" />
+    <circle cx="16" cy="12" r="1.5" fill="currentColor" />
+    <circle cx="10" cy="18" r="1.5" fill="currentColor" />
+  </svg>
+);
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function describeLoginError(error) {
+  if (error.code === 'ECONNABORTED') {
+    return 'O servidor demorou para responder (o Render free "dorme"). Espere 1 minuto e tente de novo.';
+  }
   if (error.code === 'ERR_NETWORK' || !error.response) {
-    return 'Não foi possível falar com o servidor. Verifique se o backend está rodando em localhost:8000.';
+    return `Não foi possível falar com a API (${API}). Confirme se o Render está Live e tente novamente.`;
   }
   const detail = error.response.data?.detail;
   if (error.response.status === 404) {
     return 'Rota não encontrada no servidor. Reinicie o backend (python main.py) para carregar as rotas novas.';
   }
   if (error.response.status === 401) {
+    const detail = error.response.data?.detail;
+    if (typeof detail === 'string' && detail !== 'INVALID_LOGIN_CREDENTIALS') return detail;
     return 'E-mail ou senha incorretos.';
   }
   if (error.response.status === 409) {
@@ -189,6 +211,97 @@ function StatusDots() {
       <span className="console-dot bg-danger/70" />
       <span className="console-dot bg-amber/70" />
       <span className="console-dot bg-success/70" />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// WarmUpBanner — shown when login takes > 3s (Render cold start)
+// ---------------------------------------------------------------------------
+
+function WarmUpBanner() {
+  const [seconds, setSeconds] = useState(60);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSeconds((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="warmup-banner">
+      <div className="relative z-10 flex items-center gap-3">
+        <div className="warmup-wave">
+          <span /><span /><span /><span /><span />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-primary font-medium">O servidor está acordando…</p>
+          <p className="text-[11px] text-ink-dim mt-0.5">
+            O Render free "dorme" após inatividade. Aguarde, a conexão será estabelecida automaticamente.
+          </p>
+        </div>
+        <div className="warmup-countdown" title="Tempo estimado restante">
+          {seconds}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// API Badge Card — elegant read-only view for user's enabled APIs
+// ---------------------------------------------------------------------------
+
+function ApiBadgeCard({ api, isActive }) {
+  return (
+    <div className={`api-badge-card api-badge-enter ${isActive ? 'api-badge-card--active' : 'api-badge-card--inactive'}`}>
+      <div className="flex items-center gap-3 mb-2">
+        <span className={`api-status-dot ${isActive ? 'api-status-dot--active' : 'api-status-dot--inactive'}`} />
+        <span className="text-sm font-medium text-ink">{api.name}</span>
+        <span className={`ml-auto text-[10px] font-mono uppercase tracking-wider ${isActive ? 'text-success' : 'text-ink-faint'}`}>
+          {isActive ? 'Ativa' : 'Inativa'}
+        </span>
+      </div>
+      <p className="text-[11px] text-ink-dim mb-2.5 leading-relaxed">{api.description}</p>
+      {api.supports?.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {api.supports.map((type) => (
+            <span key={type} className="api-chip">{type}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sidebar API Badges — compact inline badges
+// ---------------------------------------------------------------------------
+
+function SidebarApiBadges({ catalogApis, enabledApis }) {
+  const active = catalogApis.filter((api) => enabledApis.includes(api.id));
+  if (active.length === 0) {
+    return (
+      <p className="text-xs text-ink-faint px-1 mt-4">
+        Nenhuma API ativa nesta conta. Fale com o administrador.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-4 space-y-2.5 px-1">
+      <p className="text-[10px] font-mono uppercase tracking-widest text-ink-faint">
+        Fontes ativas na sua conta
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {active.map((api) => (
+          <span key={api.id} className="api-sidebar-badge api-badge-enter">
+            <span className="api-status-dot api-status-dot--active" />
+            {api.name}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -312,6 +425,7 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [showWarmUp, setShowWarmUp] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState(null);
@@ -336,6 +450,7 @@ function App() {
   const cardRef = useRef(null);
   const greetingRef = useRef(null);
   const transitionRef = useRef(null);
+  const warmUpTimerRef = useRef(null);
 
   const animateDashboardEntry = useCallback(() => {
     gsap.fromTo(
@@ -386,6 +501,16 @@ function App() {
       .catch(() => {});
   }, [isLogged]);
 
+  // Start/stop keep-alive when login state changes
+  useEffect(() => {
+    if (isLogged) {
+      startKeepAlive();
+    } else {
+      stopKeepAlive();
+    }
+    return () => stopKeepAlive();
+  }, [isLogged]);
+
   const completeLogin = (data) => {
     setUserId(data.user);
     setUserName(data.display_name || 'Usuário');
@@ -396,35 +521,9 @@ function App() {
     if (Array.isArray(data.enabled_apis)) {
       setEnabledApis(data.enabled_apis);
     }
-    setIsTransitioning(true);
-
-    gsap.to(cardRef.current, {
-      scale: 1.04,
-      opacity: 0,
-      duration: 0.45,
-      ease: 'power2.in',
-      onComplete: () => {
-        gsap.fromTo(
-          transitionRef.current,
-          { opacity: 0 },
-          {
-            opacity: 1,
-            duration: 0.3,
-            onComplete: () => {
-              setIsLogged(true);
-              setTimeout(() => {
-                gsap.to(transitionRef.current, {
-                  opacity: 0,
-                  duration: 0.5,
-                  delay: 0.4,
-                  onComplete: () => setIsTransitioning(false),
-                });
-              }, 600);
-            },
-          }
-        );
-      },
-    });
+    setShowWarmUp(false);
+    setIsLogged(true);
+    setIsTransitioning(false);
 
     axios
       .post(`${API}/log`, { user_id: data.user, action: 'login' })
@@ -435,10 +534,20 @@ function App() {
     e.preventDefault();
     setLoginError('');
     setIsLoggingIn(true);
+    setShowWarmUp(false);
+
+    // Show warm-up banner after 3 seconds if still logging in
+    warmUpTimerRef.current = setTimeout(() => {
+      setShowWarmUp(true);
+    }, 3000);
+
     try {
-      const response = await axios.post(`${API}/login`, { email, password });
+      const response = await axios.post(`${API}/login`, { email, password }, { timeout: 90000 });
+      clearTimeout(warmUpTimerRef.current);
       completeLogin(response.data);
     } catch (error) {
+      clearTimeout(warmUpTimerRef.current);
+      setShowWarmUp(false);
       setLoginError(describeLoginError(error));
     } finally {
       setIsLoggingIn(false);
@@ -449,14 +558,23 @@ function App() {
     e.preventDefault();
     setLoginError('');
     setIsLoggingIn(true);
+    setShowWarmUp(false);
+
+    warmUpTimerRef.current = setTimeout(() => {
+      setShowWarmUp(true);
+    }, 3000);
+
     try {
       const response = await axios.post(`${API}/register`, {
         email,
         password,
         display_name: displayName.trim(),
       });
+      clearTimeout(warmUpTimerRef.current);
       completeLogin(response.data);
     } catch (error) {
+      clearTimeout(warmUpTimerRef.current);
+      setShowWarmUp(false);
       setLoginError(describeLoginError(error));
     } finally {
       setIsLoggingIn(false);
@@ -483,6 +601,7 @@ function App() {
     setAuthToken('');
     setShowAdmin(false);
     setAuthMode('login');
+    setShowWarmUp(false);
   };
 
   const openSettings = () => {
@@ -541,7 +660,15 @@ function App() {
   const switchAuthMode = (mode) => {
     setAuthMode(mode);
     setLoginError('');
+    setShowWarmUp(false);
   };
+
+  // Settings tabs config
+  const settingsTabs = [
+    { id: 'perfil', label: 'Perfil', desc: 'Nome e apelido' },
+    { id: 'conta', label: 'Conta', desc: 'E-mail e sessão' },
+    ...(!isAdmin ? [{ id: 'apis', label: 'Minhas APIs', desc: 'Fontes de dados' }] : []),
+  ];
 
   // -------------------------------------------------------------------
   // Login / Register screen
@@ -672,6 +799,9 @@ function App() {
                   </p>
                 )}
 
+                {/* Warm-up banner — appears when login takes > 3s */}
+                {showWarmUp && isLoggingIn && <WarmUpBanner />}
+
                 {loginError && (
                   <div className="error-banner flex items-start gap-2.5 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
                     <IconAlert className="w-4 h-4 mt-0.5 shrink-0" />
@@ -687,7 +817,7 @@ function App() {
                   {isLoggingIn ? (
                     <>
                       <span className="spinner" />
-                      {authMode === 'login' ? 'Entrando…' : 'Criando conta…'}
+                      {authMode === 'login' ? 'Conectando ao servidor…' : 'Criando conta…'}
                     </>
                   ) : (
                     authMode === 'login' ? 'Entrar' : 'Criar conta e entrar'
@@ -697,8 +827,8 @@ function App() {
             </div>
           </div>
 
-          <p className="text-center text-[11px] text-ink-faint font-mono mt-5 tracking-wide">
-            acesso monitorado · v1.0
+          <p className="text-center text-[11px] text-ink-faint font-mono mt-5 tracking-wide break-all px-2">
+            api · {API}
           </p>
         </div>
       </div>
@@ -791,10 +921,7 @@ function App() {
             <div className="flex flex-col lg:flex-row lg:items-stretch min-h-[320px]">
               <aside className="settings-sidebar lg:w-56 shrink-0 border-b lg:border-b-0 lg:border-r border-white/10 p-4 lg:p-5">
                 <p className="text-[10px] font-mono uppercase tracking-widest text-ink-faint mb-3 px-2">Menu</p>
-                {[
-                  { id: 'perfil', label: 'Perfil', desc: 'Nome e apelido' },
-                  { id: 'conta', label: 'Conta', desc: 'E-mail e sessão' },
-                ].map((tab) => (
+                {settingsTabs.map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
@@ -817,10 +944,12 @@ function App() {
                     <h2 className="font-display text-xl font-semibold text-ink">
                       {settingsTab === 'perfil' && 'Perfil e apelido'}
                       {settingsTab === 'conta' && 'Dados da conta'}
+                      {settingsTab === 'apis' && 'Minhas APIs'}
                     </h2>
                     <p className="text-xs text-ink-dim mt-1">
                       {settingsTab === 'perfil' && 'Defina como você quer ser chamado ao entrar no painel.'}
                       {settingsTab === 'conta' && 'Informações da sua sessão atual.'}
+                      {settingsTab === 'apis' && 'Veja quais fontes de dados estão habilitadas na sua conta.'}
                     </p>
                   </div>
                   <button
@@ -905,6 +1034,27 @@ function App() {
                     </p>
                   </div>
                 )}
+
+                {settingsTab === 'apis' && (
+                  <div className="space-y-4 max-w-lg">
+                    <div className="space-y-3">
+                      {catalogApis.map((api) => (
+                        <ApiBadgeCard
+                          key={api.id}
+                          api={api}
+                          isActive={enabledApis.includes(api.id)}
+                        />
+                      ))}
+                    </div>
+
+                    <div className="info-note">
+                      <IconInfo className="w-4 h-4" />
+                      <span>
+                        As APIs são configuradas pelo administrador do sistema. Para ativar ou desativar uma fonte de dados, entre em contato com o admin.
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </section>
@@ -934,10 +1084,10 @@ function App() {
               </button>
             </section>
 
-            <p className="mt-4 text-xs text-ink-faint leading-relaxed px-1 hidden lg:block">
-              Fontes definidas pelo admin: {catalogApis.filter((api) => enabledApis.includes(api.id)).map((api) => api.name).join(', ') || 'nenhuma'}.
-              Os resultados unificados aparecem à direita.
-            </p>
+            {/* Sidebar API badges — visual, elegant, hidden on small screens */}
+            <div className="hidden lg:block">
+              <SidebarApiBadges catalogApis={catalogApis} enabledApis={enabledApis} />
+            </div>
           </aside>
 
           <section className="results-stage dashboard-stagger" aria-live="polite">

@@ -9,7 +9,7 @@ from firebase_admin import credentials, auth, firestore
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from dotenv import load_dotenv
 from search import AVAILABLE_APIS, DEFAULT_SOURCES, run_search
 
@@ -98,10 +98,12 @@ origin_list = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origin_list,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=r"https://.*\.(vercel\.app|onrender\.com)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=86400,
 )
 
 
@@ -137,25 +139,31 @@ def require_admin(authorization: Optional[str]) -> dict:
 
 
 def user_enabled_apis(uid: str) -> list:
-    doc = db.collection("users").document(uid).get()
-    if doc.exists:
-        stored = doc.to_dict().get("enabled_apis")
-        if isinstance(stored, list) and stored:
-            allowed = {api["id"] for api in AVAILABLE_APIS}
-            return [src for src in stored if src in allowed]
+    try:
+        doc = db.collection("users").document(uid).get(timeout=5)
+        if doc.exists:
+            stored = doc.to_dict().get("enabled_apis")
+            if isinstance(stored, list) and stored:
+                allowed = {api["id"] for api in AVAILABLE_APIS}
+                return [src for src in stored if src in allowed]
+    except Exception as exc:
+        print(f"Aviso Firestore user_enabled_apis: {exc}")
     return DEFAULT_SOURCES[:]
 
 
 def write_activity(user_id: str, action: str, extra: Optional[dict] = None, request: Optional[Request] = None):
-    payload = {
-        "user_id": user_id,
-        "action": action,
-        "timestamp": datetime.now().isoformat(),
-        "device_info": get_device_info(request),
-    }
-    if extra:
-        payload.update(extra)
-    db.collection("user_activity").document().set(payload)
+    try:
+        payload = {
+            "user_id": user_id,
+            "action": action,
+            "timestamp": datetime.now().isoformat(),
+            "device_info": get_device_info(request),
+        }
+        if extra:
+            payload.update(extra)
+        db.collection("user_activity").document().set(payload, timeout=5)
+    except Exception as exc:
+        print(f"Aviso Firestore write_activity: {exc}")
 
 
 def session_payload(uid: str, email: str, display_name: str, id_token: str, extra: Optional[dict] = None):
@@ -174,11 +182,14 @@ def session_payload(uid: str, email: str, display_name: str, id_token: str, extr
 
 
 def get_user_display_name(uid: str, email: Optional[str] = None) -> str:
-    doc = db.collection("users").document(uid).get()
-    if doc.exists:
-        stored = doc.to_dict().get("display_name")
-        if stored:
-            return stored
+    try:
+        doc = db.collection("users").document(uid).get(timeout=5)
+        if doc.exists:
+            stored = doc.to_dict().get("display_name")
+            if stored:
+                return stored
+    except Exception:
+        pass
     try:
         user_record = auth.get_user(uid)
         if user_record.display_name:
@@ -195,23 +206,29 @@ def update_user_display_name(uid: str, display_name: str, email: Optional[str] =
     display_name = display_name.strip()
     if not display_name:
         raise HTTPException(status_code=400, detail="Informe um nome válido")
-    auth.update_user(uid, display_name=display_name)
-    user_ref = db.collection("users").document(uid)
-    payload = {
-        "display_name": display_name,
-        "updated_at": datetime.now().isoformat(),
-    }
-    if email:
-        payload["email"] = email
-    if user_ref.get().exists:
-        user_ref.update(payload)
-    else:
-        user_ref.set({
-            **payload,
-            "email": email or "",
-            "enabled_apis": DEFAULT_SOURCES[:],
-            "created_at": datetime.now().isoformat(),
-        })
+    try:
+        auth.update_user(uid, display_name=display_name)
+    except Exception:
+        pass
+    try:
+        user_ref = db.collection("users").document(uid)
+        payload = {
+            "display_name": display_name,
+            "updated_at": datetime.now().isoformat(),
+        }
+        if email:
+            payload["email"] = email
+        if user_ref.get(timeout=5).exists:
+            user_ref.update(payload, timeout=5)
+        else:
+            user_ref.set({
+                **payload,
+                "email": email or "",
+                "enabled_apis": DEFAULT_SOURCES[:],
+                "created_at": datetime.now().isoformat(),
+            }, timeout=5)
+    except Exception as exc:
+        print(f"Aviso Firestore update_user_display_name: {exc}")
     return display_name
 
 
@@ -227,7 +244,7 @@ def verify_password_with_firebase(email: str, password: str) -> dict:
     ).encode("utf-8")
     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         try:
@@ -240,6 +257,51 @@ def verify_password_with_firebase(email: str, password: str) -> dict:
         raise HTTPException(status_code=502, detail="Não foi possível contatar o Firebase.")
 
 
+def register_with_firebase_rest(email: str, password: str, display_name: str) -> dict:
+    if not FIREBASE_WEB_API_KEY:
+        raise HTTPException(status_code=500, detail="FIREBASE_WEB_API_KEY não configurada no servidor.")
+    url = (
+        "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
+        f"?key={FIREBASE_WEB_API_KEY}"
+    )
+    payload = json.dumps(
+        {"email": email, "password": password, "returnSecureToken": True}
+    ).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            # Atualiza o display name no Firebase Auth
+            try:
+                up_url = f"https://identitytoolkit.googleapis.com/v1/accounts:update?key={FIREBASE_WEB_API_KEY}"
+                up_payload = json.dumps({
+                    "idToken": data.get("idToken"),
+                    "displayName": display_name,
+                    "returnSecureToken": True
+                }).encode("utf-8")
+                up_req = urllib.request.Request(up_url, data=up_payload, headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(up_req, timeout=10) as up_resp:
+                    up_data = json.loads(up_resp.read().decode("utf-8"))
+                    data.update(up_data)
+            except Exception:
+                pass
+            return data
+    except urllib.error.HTTPError as e:
+        try:
+            error_body = json.loads(e.read().decode("utf-8"))
+            msg = error_body.get("error", {}).get("message", "")
+            if "EMAIL_EXISTS" in msg:
+                raise HTTPException(status_code=409, detail="Este e-mail já está cadastrado")
+            detail = msg or "Não foi possível criar a conta"
+        except HTTPException:
+            raise
+        except Exception:
+            detail = "Não foi possível criar a conta"
+        raise HTTPException(status_code=400, detail=detail)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Erro ao contatar Firebase: {exc}")
+
+
 @app.post("/login")
 async def login(request: Request):
     data = await request.json()
@@ -250,15 +312,18 @@ async def login(request: Request):
 
     result = verify_password_with_firebase(email, password)
     uid = result["localId"]
-    display_name = get_user_display_name(uid, email)
-    user_ref = db.collection("users").document(uid)
-    if not user_ref.get().exists:
-        user_ref.set({
-            "display_name": display_name,
-            "email": email,
-            "enabled_apis": DEFAULT_SOURCES[:],
-            "created_at": datetime.now().isoformat(),
-        })
+    display_name = result.get("displayName") or get_user_display_name(uid, email)
+    try:
+        user_ref = db.collection("users").document(uid)
+        if not user_ref.get(timeout=5).exists:
+            user_ref.set({
+                "display_name": display_name,
+                "email": email,
+                "enabled_apis": DEFAULT_SOURCES[:],
+                "created_at": datetime.now().isoformat(),
+            }, timeout=5)
+    except Exception as exc:
+        print(f"Aviso Firestore no login: {exc}")
     write_activity(uid, "login", request=request)
     return JSONResponse(session_payload(uid, email, display_name, result.get("idToken", "")))
 
@@ -276,23 +341,22 @@ async def register(request: Request):
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="A senha deve ter pelo menos 6 caracteres")
 
-    try:
-        user_record = auth.create_user(email=email, password=password, display_name=display_name)
-    except auth.EmailAlreadyExistsError:
-        raise HTTPException(status_code=409, detail="Este e-mail já está cadastrado")
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    login_result = register_with_firebase_rest(email, password, display_name)
+    uid = login_result.get("localId")
 
-    db.collection("users").document(user_record.uid).set({
-        "display_name": display_name,
-        "email": email,
-        "enabled_apis": DEFAULT_SOURCES[:],
-        "created_at": datetime.now().isoformat(),
-    })
-    login_result = verify_password_with_firebase(email, password)
-    write_activity(user_record.uid, "conta criada", request=request)
+    try:
+        db.collection("users").document(uid).set({
+            "display_name": display_name,
+            "email": email,
+            "enabled_apis": DEFAULT_SOURCES[:],
+            "created_at": datetime.now().isoformat(),
+        }, timeout=5)
+    except Exception as exc:
+        print(f"Aviso Firestore no register: {exc}")
+
+    write_activity(uid, "conta criada", request=request)
     payload = session_payload(
-        login_result["localId"], email, display_name, login_result.get("idToken", ""),
+        uid, email, display_name, login_result.get("idToken", ""),
         extra={"status": "created"},
     )
     return JSONResponse(payload)
@@ -371,6 +435,36 @@ async def health():
         "firebase_key": bool(FIREBASE_WEB_API_KEY),
         "admin_configured": bool(ADMIN_EMAIL),
     })
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    site = os.getenv("FRONTEND_URL", "https://painel-25xg-silk.vercel.app").rstrip("/")
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Painel de Dados — API</title>
+  <style>
+    body {{ margin:0; min-height:100vh; display:grid; place-items:center;
+      font-family: Inter, system-ui, sans-serif; background:#070B12; color:#E8EEF7; }}
+    .card {{ max-width: 28rem; padding: 2rem; border: 1px solid rgba(58,167,255,.25);
+      border-radius: 1.25rem; background: rgba(15,22,34,.8); }}
+    a {{ color:#3AA7FF; }}
+    p {{ color:#8492A6; line-height:1.5; }}
+    code {{ color:#FFB648; font-size: .85rem; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Esta URL é a API</h1>
+    <p>O site do painel não fica no Render. Abra o frontend na Vercel:</p>
+    <p><a href="{site}">{site}</a></p>
+    <p>Teste da API: <a href="/health"><code>/health</code></a></p>
+  </div>
+</body>
+</html>"""
 
 
 @app.post("/log")
