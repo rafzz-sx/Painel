@@ -118,8 +118,11 @@ const IconGrid = (props) => (
 // ---------------------------------------------------------------------------
 
 function describeLoginError(error) {
+  if (error.code === 'ECONNABORTED') {
+    return 'O servidor demorou para responder (o Render free “dorme”). Espere 1 minuto e tente de novo.';
+  }
   if (error.code === 'ERR_NETWORK' || !error.response) {
-    return 'Não foi possível falar com o servidor. Verifique se o backend está rodando em localhost:8000.';
+    return `Não foi possível falar com a API (${API}). Confirme se o Render está Live e tente novamente.`;
   }
   const detail = error.response.data?.detail;
   if (error.response.status === 404) {
@@ -687,7 +690,7 @@ function App() {
                   {isLoggingIn ? (
                     <>
                       <span className="spinner" />
-                      {authMode === 'login' ? 'Entrando…' : 'Criando conta…'}
+                      {authMode === 'login' ? 'Conectando ao servidor…' : 'Criando conta…'}
                     </>
                   ) : (
                     authMode === 'login' ? 'Entrar' : 'Criar conta e entrar'
