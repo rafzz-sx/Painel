@@ -3,6 +3,7 @@ import { gsap } from 'gsap';
 import axios from 'axios';
 import { API, startKeepAlive, stopKeepAlive } from './api';
 import AdminDashboard from './AdminDashboard';
+import HelpModal, { IconHelp } from './HelpModal';
 
 const DEFAULT_APIS = [
   {
@@ -16,6 +17,36 @@ const DEFAULT_APIS = [
     name: 'BrasilAPI',
     description: 'CEP, CNPJ, DDD, bancos, NCM, ISBN e feriados.',
     supports: ['CEP', 'CNPJ', 'DDD', 'Telefone', 'Banco', 'NCM', 'Nome'],
+  },
+  {
+    id: 'phoneint',
+    name: 'Telefone Intel',
+    description: 'Operadora, região, links WhatsApp e Telegram.',
+    supports: ['Telefone', 'Celular'],
+  },
+  {
+    id: 'emailint',
+    name: 'E-mail Intel',
+    description: 'Gravatar (foto e perfil), validação e anti-descartável.',
+    supports: ['E-mail'],
+  },
+  {
+    id: 'cpfint',
+    name: 'CPF Intel',
+    description: 'Estado emissor da Receita Federal pelo 9º dígito.',
+    supports: ['CPF'],
+  },
+  {
+    id: 'plateint',
+    name: 'Placa Intel',
+    description: 'Formato Mercosul/Antigo e estado de registro.',
+    supports: ['Placa'],
+  },
+  {
+    id: 'ipdomainint',
+    name: 'IP/Domínio Intel',
+    description: 'Geolocalização de IP e consulta RDAP de domínios.',
+    supports: ['IP', 'Domínio'],
   },
 ];
 
@@ -407,18 +438,75 @@ function ResultsPanel({ results, variant = 'default' }) {
         </div>
         <div className="result-glow-line h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent origin-left shrink-0" />
         <div className={`data-readout p-5 overflow-auto grid gap-2.5 flex-1 ${isStage ? 'sm:grid-cols-2' : 'sm:grid-cols-2'} ${isStage ? 'max-h-[340px]' : 'max-h-[460px]'}`}>
-          {fields.map(({ key, value, sources }) => (
-            <div
-              key={`${key}-${value}`}
-              className="result-field glass-panel rounded-xl px-4 py-3.5 border border-white/5 hover:border-primary/25 hover:shadow-[0_0_20px_rgba(58,167,255,0.08)] transition-all duration-300"
-            >
-              <p className="text-[10px] font-mono uppercase tracking-wider text-primary/80 mb-1.5 truncate">{key}</p>
-              <p className="text-sm text-ink/90 font-mono break-words">{value}</p>
-              {sources?.length > 0 && (
-                <p className="text-[10px] font-mono text-ink-faint mt-2">{sources.join(' · ')}</p>
-              )}
-            </div>
-          ))}
+          {fields.map(({ key, value, sources }) => {
+            const isLink = typeof value === 'string' && (value.startsWith('https://') || value.startsWith('http://'));
+            const isWhatsApp = key.toLowerCase().includes('whatsapp');
+            const isTelegram = key.toLowerCase().includes('telegram');
+            const isMaps = key.toLowerCase().includes('google_maps');
+            const isGravatarPhoto = key.toLowerCase().includes('gravatar_foto');
+            const isAlert = key.startsWith('⚠️');
+            const isValid = typeof value === 'string' && value.startsWith('✅');
+            const isInvalid = typeof value === 'string' && value.startsWith('❌');
+
+            return (
+              <div
+                key={`${key}-${value}`}
+                className={`result-field glass-panel rounded-xl px-4 py-3.5 border transition-all duration-300 ${
+                  isAlert
+                    ? 'border-amber/30 bg-amber/5 hover:border-amber/50'
+                    : isValid
+                    ? 'border-success/20 hover:border-success/40'
+                    : isInvalid
+                    ? 'border-danger/20 hover:border-danger/40'
+                    : 'border-white/5 hover:border-primary/25 hover:shadow-[0_0_20px_rgba(58,167,255,0.08)]'
+                }`}
+              >
+                <p className={`text-[10px] font-mono uppercase tracking-wider mb-1.5 truncate ${
+                  isAlert ? 'text-amber' : isValid ? 'text-success' : isInvalid ? 'text-danger' : 'text-primary/80'
+                }`}>{key}</p>
+
+                {isGravatarPhoto ? (
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={value}
+                      alt="Gravatar"
+                      className="w-12 h-12 rounded-full border-2 border-primary/30 shadow-lg"
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                    <p className="text-xs text-ink-dim font-mono">Foto de perfil</p>
+                  </div>
+                ) : isLink ? (
+                  <a
+                    href={value}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex items-center gap-2 text-sm font-mono break-words transition-colors ${
+                      isWhatsApp
+                        ? 'text-[#25D366] hover:text-[#128C7E]'
+                        : isTelegram
+                        ? 'text-[#0088cc] hover:text-[#006daa]'
+                        : isMaps
+                        ? 'text-[#4285F4] hover:text-[#1a73e8]'
+                        : 'text-primary hover:text-ink'
+                    }`}
+                  >
+                    {isWhatsApp && '💬 '}
+                    {isTelegram && '✈️ '}
+                    {isMaps && '📍 '}
+                    {isWhatsApp ? 'Abrir no WhatsApp' : isTelegram ? 'Abrir no Telegram' : isMaps ? 'Ver no Google Maps' : value}
+                  </a>
+                ) : (
+                  <p className={`text-sm font-mono break-words ${
+                    isValid ? 'text-success' : isInvalid ? 'text-danger' : 'text-ink/90'
+                  }`}>{value}</p>
+                )}
+
+                {sources?.length > 0 && (
+                  <p className="text-[10px] font-mono text-ink-faint mt-2">{sources.join(' · ')}</p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -465,6 +553,7 @@ function App() {
   const [ticketMessage, setTicketMessage] = useState('');
   const [ticketSending, setTicketSending] = useState(false);
   const [ticketSuccess, setTicketSuccess] = useState('');
+  const [showHelp, setShowHelp] = useState(false);
 
   const dashboardRef = useRef(null);
   const cardRef = useRef(null);
@@ -1118,7 +1207,7 @@ function App() {
                 <IconSearch className="w-[18px] h-[18px] text-ink-dim shrink-0" />
                 <input
                   type="text"
-                  placeholder="CPF, CNPJ, CEP, DDD, telefone, banco ou nome"
+                  placeholder="CPF, CNPJ, CEP, telefone, e-mail, placa, IP, domínio…"
                   className="w-full bg-transparent text-ink placeholder:text-ink-faint text-sm outline-none"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -1179,6 +1268,16 @@ function App() {
           </section>
         </div>
 
+        {/* ── Botão flutuante de dúvidas ── */}
+        <button
+          type="button"
+          onClick={() => setShowHelp(true)}
+          className="help-fab"
+          title="Dúvidas e ajuda"
+        >
+          <IconHelp className="w-5 h-5" />
+        </button>
+
         {/* ── Botão flutuante de ticket ── */}
         <button
           type="button"
@@ -1188,6 +1287,9 @@ function App() {
         >
           <IconTicket className="w-5 h-5" />
         </button>
+
+        {/* ── Modal de Ajuda/Dúvidas ── */}
+        <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
 
         {/* ── Modal de Ticket ── */}
         {showTicketModal && (
