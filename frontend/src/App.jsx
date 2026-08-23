@@ -7,39 +7,51 @@ import HelpModal, { IconHelp } from './HelpModal';
 
 const DEFAULT_APIS = [
   {
+    id: 'minhareceita',
+    name: 'Minha Receita (CNPJ & Sócios)',
+    description: 'Dados de CNPJ, Quadro de Sócios (QSA), CNAE e Capital Social.',
+    supports: ['CNPJ'],
+  },
+  {
     id: 'receitaws',
     name: 'ReceitaWS',
-    description: 'Consulta CPF e CNPJ na Receita Federal.',
-    supports: ['CPF', 'CNPJ'],
+    description: 'Consulta CNPJ na Receita Federal.',
+    supports: ['CNPJ'],
   },
   {
     id: 'brasilapi',
     name: 'BrasilAPI',
     description: 'CEP, CNPJ, DDD, bancos, NCM, ISBN e feriados.',
-    supports: ['CEP', 'CNPJ', 'DDD', 'Telefone', 'Banco', 'NCM', 'Nome'],
+    supports: ['CEP', 'CNPJ', 'DDD', 'Telefone', 'Banco', 'NCM', 'Ano'],
+  },
+  {
+    id: 'nameint',
+    name: 'Nome Intel (Pessoas & Diários)',
+    description: 'Perfis no GitHub, Diários Oficiais, Transparência Federal e Sócios.',
+    supports: ['Nome'],
   },
   {
     id: 'phoneint',
     name: 'Telefone Intel',
-    description: 'Operadora, região, links WhatsApp e Telegram.',
+    description: 'Operadora Anatel, região, WhatsApp, Telegram e identificadores OSINT.',
     supports: ['Telefone', 'Celular'],
   },
   {
     id: 'emailint',
     name: 'E-mail Intel',
-    description: 'Gravatar (foto e perfil), validação e anti-descartável.',
+    description: 'Gravatar, GitHub, pegada social, validação MX e anti-descartável.',
     supports: ['E-mail'],
   },
   {
     id: 'cpfint',
     name: 'CPF Intel',
-    description: 'Estado emissor da Receita Federal pelo 9º dígito.',
+    description: 'Validação algorítmica, Estado emissor (9º dígito) e portal oficial.',
     supports: ['CPF'],
   },
   {
     id: 'plateint',
     name: 'Placa Intel',
-    description: 'Formato Mercosul/Antigo e estado de registro.',
+    description: 'Padrão Mercosul/Antigo e Estado de registro Denatran.',
     supports: ['Placa'],
   },
   {
@@ -437,76 +449,102 @@ function ResultsPanel({ results, variant = 'default' }) {
           </div>
         </div>
         <div className="result-glow-line h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent origin-left shrink-0" />
-        <div className={`data-readout p-5 overflow-auto grid gap-2.5 flex-1 ${isStage ? 'sm:grid-cols-2' : 'sm:grid-cols-2'} ${isStage ? 'max-h-[340px]' : 'max-h-[460px]'}`}>
-          {fields.map(({ key, value, sources }) => {
-            const isLink = typeof value === 'string' && (value.startsWith('https://') || value.startsWith('http://'));
-            const isWhatsApp = key.toLowerCase().includes('whatsapp');
-            const isTelegram = key.toLowerCase().includes('telegram');
-            const isMaps = key.toLowerCase().includes('google_maps');
-            const isGravatarPhoto = key.toLowerCase().includes('gravatar_foto');
-            const isAlert = key.startsWith('⚠️');
-            const isValid = typeof value === 'string' && value.startsWith('✅');
-            const isInvalid = typeof value === 'string' && value.startsWith('❌');
+        <div className={`data-readout p-5 overflow-auto flex-1 ${isStage ? 'max-h-[340px]' : 'max-h-[460px]'}`}>
+          {fields.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+              <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-ink-dim mb-3">
+                <IconSearch className="w-6 h-6" />
+              </div>
+              <p className="text-sm font-medium text-ink mb-1">Nenhum registro retornado</p>
+              <p className="text-xs text-ink-dim max-w-sm">
+                Tente buscar por um CPF (ex: 123.456.789-00), CNPJ, Telefone com DDD, E-mail, Placa de carro ou Nome completo.
+              </p>
+            </div>
+          ) : (
+            <div className={`grid gap-2.5 ${isStage ? 'sm:grid-cols-2' : 'sm:grid-cols-2'}`}>
+              {fields.map(({ key, value, sources }) => {
+                const isLink = typeof value === 'string' && (value.startsWith('https://') || value.startsWith('http://'));
+                const isAvatar = key.toLowerCase().includes('avatar') || key.toLowerCase().includes('gravatar_foto');
+                const isAlert = key.startsWith('⚠️') || key.toLowerCase().includes('alerta');
+                const isValid = typeof value === 'string' && value.startsWith('✅');
+                const isInvalid = typeof value === 'string' && value.startsWith('❌');
 
-            return (
-              <div
-                key={`${key}-${value}`}
-                className={`result-field glass-panel rounded-xl px-4 py-3.5 border transition-all duration-300 ${
-                  isAlert
-                    ? 'border-amber/30 bg-amber/5 hover:border-amber/50'
-                    : isValid
-                    ? 'border-success/20 hover:border-success/40'
-                    : isInvalid
-                    ? 'border-danger/20 hover:border-danger/40'
-                    : 'border-white/5 hover:border-primary/25 hover:shadow-[0_0_20px_rgba(58,167,255,0.08)]'
-                }`}
-              >
-                <p className={`text-[10px] font-mono uppercase tracking-wider mb-1.5 truncate ${
-                  isAlert ? 'text-amber' : isValid ? 'text-success' : isInvalid ? 'text-danger' : 'text-primary/80'
-                }`}>{key}</p>
+                // Label inteligente para links OSINT
+                const getLinkLabel = () => {
+                  const k = key.toLowerCase();
+                  if (k.includes('whatsapp')) return { icon: '💬', text: 'Abrir no WhatsApp', color: 'text-[#25D366] hover:text-[#128C7E]' };
+                  if (k.includes('telegram')) return { icon: '✈️', text: 'Abrir no Telegram', color: 'text-[#0088cc] hover:text-[#006daa]' };
+                  if (k.includes('google_maps')) return { icon: '📍', text: 'Ver no Google Maps', color: 'text-[#4285F4] hover:text-[#1a73e8]' };
+                  if (k.includes('portal_transparencia')) return { icon: '🏛️', text: 'Consultar Portal da Transparência', color: 'text-amber hover:text-ink' };
+                  if (k.includes('diarios_oficiais')) return { icon: '📰', text: 'Buscar em Diários Oficiais (Querido Diário)', color: 'text-primary hover:text-ink' };
+                  if (k.includes('jusbrasil')) return { icon: '⚖️', text: 'Buscar Processos no Jusbrasil', color: 'text-primary hover:text-ink' };
+                  if (k.includes('escavador')) return { icon: '📄', text: 'Buscar no Escavador', color: 'text-primary hover:text-ink' };
+                  if (k.includes('github')) return { icon: '🐙', text: 'Ver Perfil no GitHub', color: 'text-ink hover:text-primary' };
+                  if (k.includes('truecaller')) return { icon: '📞', text: 'Consultar no Truecaller', color: 'text-[#0087FF] hover:text-ink' };
+                  if (k.includes('syncme')) return { icon: '🔍', text: 'Consultar no Sync.me', color: 'text-[#00C389] hover:text-ink' };
+                  if (k.includes('receita_federal')) return { icon: '📑', text: 'Comprovante Oficial da Receita Federal', color: 'text-amber hover:text-ink' };
+                  if (k.includes('twitter') || k.includes('x.com')) return { icon: '🐦', text: 'Ver Perfil no X (Twitter)', color: 'text-ink hover:text-primary' };
+                  if (k.includes('google_account')) return { icon: '🔍', text: 'Verificar Conta Google', color: 'text-[#EA4335] hover:text-ink' };
+                  if (k.includes('instagram')) return { icon: '📸', text: 'Verificar Conta Instagram', color: 'text-[#E1306C] hover:text-ink' };
+                  return { icon: '🔗', text: value, color: 'text-primary hover:text-ink' };
+                };
 
-                {isGravatarPhoto ? (
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={value}
-                      alt="Gravatar"
-                      className="w-12 h-12 rounded-full border-2 border-primary/30 shadow-lg"
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                    <p className="text-xs text-ink-dim font-mono">Foto de perfil</p>
-                  </div>
-                ) : isLink ? (
-                  <a
-                    href={value}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`inline-flex items-center gap-2 text-sm font-mono break-words transition-colors ${
-                      isWhatsApp
-                        ? 'text-[#25D366] hover:text-[#128C7E]'
-                        : isTelegram
-                        ? 'text-[#0088cc] hover:text-[#006daa]'
-                        : isMaps
-                        ? 'text-[#4285F4] hover:text-[#1a73e8]'
-                        : 'text-primary hover:text-ink'
+                const linkInfo = isLink ? getLinkLabel() : null;
+
+                return (
+                  <div
+                    key={`${key}-${value}`}
+                    className={`result-field glass-panel rounded-xl px-4 py-3.5 border transition-all duration-300 ${
+                      isAlert
+                        ? 'border-amber/30 bg-amber/5 hover:border-amber/50'
+                        : isValid
+                        ? 'border-success/20 hover:border-success/40'
+                        : isInvalid
+                        ? 'border-danger/20 hover:border-danger/40'
+                        : 'border-white/5 hover:border-primary/25 hover:shadow-[0_0_20px_rgba(58,167,255,0.08)]'
                     }`}
                   >
-                    {isWhatsApp && '💬 '}
-                    {isTelegram && '✈️ '}
-                    {isMaps && '📍 '}
-                    {isWhatsApp ? 'Abrir no WhatsApp' : isTelegram ? 'Abrir no Telegram' : isMaps ? 'Ver no Google Maps' : value}
-                  </a>
-                ) : (
-                  <p className={`text-sm font-mono break-words ${
-                    isValid ? 'text-success' : isInvalid ? 'text-danger' : 'text-ink/90'
-                  }`}>{value}</p>
-                )}
+                    <p className={`text-[10px] font-mono uppercase tracking-wider mb-1.5 truncate ${
+                      isAlert ? 'text-amber' : isValid ? 'text-success' : isInvalid ? 'text-danger' : 'text-primary/80'
+                    }`}>{key.replace(/_/g, ' ')}</p>
 
-                {sources?.length > 0 && (
-                  <p className="text-[10px] font-mono text-ink-faint mt-2">{sources.join(' · ')}</p>
-                )}
-              </div>
-            );
-          })}
+                    {isAvatar ? (
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={value}
+                          alt="Avatar"
+                          className="w-14 h-14 rounded-full border-2 border-primary/40 shadow-lg object-cover bg-surface"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                        <div>
+                          <p className="text-xs font-semibold text-ink">Foto / Avatar Público</p>
+                          <p className="text-[11px] text-ink-dim font-mono truncate max-w-[160px]">{value}</p>
+                        </div>
+                      </div>
+                    ) : isLink ? (
+                      <a
+                        href={value}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`inline-flex items-center gap-2 text-xs font-mono font-medium break-words transition-colors underline underline-offset-2 ${linkInfo.color}`}
+                      >
+                        <span>{linkInfo.icon}</span>
+                        <span>{linkInfo.text}</span>
+                      </a>
+                    ) : (
+                      <p className={`text-sm font-mono break-words ${
+                        isValid ? 'text-success font-medium' : isInvalid ? 'text-danger font-medium' : 'text-ink/90'
+                      }`}>{value}</p>
+                    )}
+
+                    {sources?.length > 0 && (
+                      <p className="text-[10px] font-mono text-ink-faint mt-2">{sources.join(' · ')}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

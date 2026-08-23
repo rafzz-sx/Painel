@@ -7,58 +7,74 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-USER_AGENT = "PainelDados/2.0"
+USER_AGENT = "PainelDados/3.0 (OSINT & Public Data Aggregator)"
 BRASILAPI = "https://brasilapi.com.br/api"
 RECEITAWS = "https://receitaws.com.br/v1"
+MINHARECEITA = "https://minhareceita.org"
+GITHUB_API = "https://api.github.com"
 
 AVAILABLE_APIS = [
+    {
+        "id": "minhareceita",
+        "name": "Minha Receita (CNPJ & Sócios)",
+        "active_by_default": True,
+        "description": "Dados completos de CNPJ, Quadro de Sócios (QSA), CNAE e Capital.",
+        "supports": ["CNPJ"],
+    },
     {
         "id": "receitaws",
         "name": "ReceitaWS",
         "active_by_default": True,
-        "description": "Consulta CPF e CNPJ na Receita Federal (via ReceitaWS).",
-        "supports": ["CPF", "CNPJ"],
+        "description": "Consulta CNPJ na Receita Federal.",
+        "supports": ["CNPJ"],
     },
     {
         "id": "brasilapi",
         "name": "BrasilAPI",
         "active_by_default": True,
         "description": "Dados públicos: CEP, CNPJ, DDD, bancos, NCM, ISBN e feriados.",
-        "supports": ["CEP", "CNPJ", "DDD", "Telefone", "Banco", "NCM", "ISBN", "Nome", "Ano"],
+        "supports": ["CEP", "CNPJ", "DDD", "Telefone", "Banco", "NCM", "ISBN", "Ano"],
+    },
+    {
+        "id": "nameint",
+        "name": "Nome Intel (Pessoas & Diários)",
+        "active_by_default": True,
+        "description": "Perfis públicos no GitHub, Diários Oficiais, Transparência Federal e Sócios.",
+        "supports": ["Nome"],
     },
     {
         "id": "phoneint",
         "name": "Telefone Intel",
         "active_by_default": True,
-        "description": "Operadora de origem (Anatel), região, links WhatsApp e Telegram.",
+        "description": "Operadora Anatel, região, links WhatsApp, Telegram e identificadores OSINT.",
         "supports": ["Telefone", "Celular"],
     },
     {
         "id": "emailint",
         "name": "E-mail Intel",
         "active_by_default": True,
-        "description": "Gravatar (foto e perfil), validação de domínio e anti-descartável.",
+        "description": "Gravatar (foto e perfil), GitHub, pegada social, validação MX e anti-descartável.",
         "supports": ["E-mail"],
     },
     {
         "id": "cpfint",
         "name": "CPF Intel",
         "active_by_default": True,
-        "description": "Identifica o Estado emissor da Receita Federal pelo 9º dígito.",
+        "description": "Validação algorítmica, Estado emissor (9º dígito) e portal oficial da Receita.",
         "supports": ["CPF"],
     },
     {
         "id": "plateint",
         "name": "Placa Intel",
         "active_by_default": True,
-        "description": "Identifica padrão Mercosul/Antigo e Estado de registro.",
+        "description": "Padrão Mercosul/Antigo e Estado de registro Denatran.",
         "supports": ["Placa"],
     },
     {
         "id": "ipdomainint",
         "name": "IP/Domínio Intel",
         "active_by_default": True,
-        "description": "Geolocalização de IP e consulta RDAP de domínios .br.",
+        "description": "Geolocalização de IP (ISP/VPN) e consulta RDAP de domínios .br.",
         "supports": ["IP", "Domínio"],
     },
 ]
@@ -103,7 +119,7 @@ KEY_ALIASES = {
 }
 
 SKIP_KEYS = {
-    "qsa", "atividades_secundarias", "billing", "extra", "e", "location",
+    "billing", "extra", "e", "location",
 }
 
 # ---------------------------------------------------------------------------
@@ -112,16 +128,16 @@ SKIP_KEYS = {
 
 # Mapeamento do 9º dígito do CPF → Região Fiscal da Receita Federal
 CPF_REGION = {
-    "1": "DF, GO, MT, MS e TO",
-    "2": "AC, AM, AP, PA, RO e RR",
-    "3": "CE, MA e PI",
-    "4": "AL, PB, PE e RN",
-    "5": "BA e SE",
-    "6": "MG",
-    "7": "ES e RJ",
-    "8": "SP",
-    "9": "PR e SC",
-    "0": "RS",
+    "1": "DF, GO, MT, MS e TO (1ª Região Fiscal)",
+    "2": "AC, AM, AP, PA, RO e RR (2ª Região Fiscal)",
+    "3": "CE, MA e PI (3ª Região Fiscal)",
+    "4": "AL, PB, PE e RN (4ª Região Fiscal)",
+    "5": "BA e SE (5ª Região Fiscal)",
+    "6": "MG (6ª Região Fiscal)",
+    "7": "ES e RJ (7ª Região Fiscal)",
+    "8": "SP (8ª Região Fiscal)",
+    "9": "PR e SC (9ª Região Fiscal)",
+    "0": "RS (10ª Região Fiscal)",
 }
 
 # DDD → Estado (cobertura completa Anatel)
@@ -155,26 +171,6 @@ STATE_NAMES = {
     "SE": "Sergipe", "SP": "São Paulo", "TO": "Tocantins",
 }
 
-# Prefixos de operadoras Anatel — faixas de início do número (após DDD)
-# Cobre os prefixos mais comuns de celular por operadora
-CARRIER_PREFIXES = {
-    # Vivo (Telefônica)
-    "99": "Vivo", "98": "Vivo", "97": "Vivo", "96": "Vivo",
-    # Claro (América Móvil)
-    "99": "Vivo/Claro", "98": "Vivo/Claro",
-    "91": "Claro", "73": "Claro", "74": "Claro",
-    # TIM
-    "92": "TIM", "93": "TIM", "94": "TIM",
-    # Oi
-    "95": "Oi", "84": "Oi", "85": "Oi",
-}
-
-# Operadoras por faixa do 5º dígito (após DDD + 9)
-# Regra geral para celulares com 9 dígitos (9XXXX-XXXX):
-CARRIER_BY_RANGE = [
-    (range(6, 10), "Vivo / Claro / TIM (portabilidade possível)"),
-]
-
 # E-mails temporários/descartáveis conhecidos
 DISPOSABLE_DOMAINS = {
     "tempmail.com", "guerrillamail.com", "sharklasers.com", "guerrillamail.info",
@@ -187,19 +183,11 @@ DISPOSABLE_DOMAINS = {
     "trashmail.net", "maildrop.cc", "harakirimail.com", "tempail.com",
     "burnermail.io", "temp-mail.org", "temp-mail.io", "fakeinbox.com",
     "mailnesia.com", "tempr.email", "discard.email", "discardmail.com",
-    "discardmail.de", "emailondeck.com", "33mail.com", "maildrop.cc",
-    "mailsac.com", "mohmal.com", "getnada.com", "emailfake.com",
-    "crazymailing.com", "tempinbox.com",
+    "discardmail.de", "emailondeck.com", "33mail.com", "mailsac.com",
+    "mohmal.com", "getnada.com", "emailfake.com", "crazymailing.com",
 }
 
-# Mapeamento de letras iniciais da placa → Estado de registro (Denatran)
-PLATE_STATE_MAP = {
-    # A faixa de letras iniciais → UF
-    "A": {range(ord("A"), ord("B")+1): "PR", range(ord("C"), ord("D")+1): "PR"},
-}
-
-# Intervalos de placas por estado (formato simplificado: 3 primeiras letras)
-# Base: resolução Denatran — mapeamento de AAA–ZZZ
+# Intervalos de placas por estado (Denatran)
 PLATE_RANGES = [
     ("AAA", "BEZ", "PR"), ("BFA", "GKI", "SP"), ("GKJ", "HOK", "MG"),
     ("HOL", "JDO", "RJ"), ("JDP", "LVE", "RS"), ("LVF", "MMM", "SC"),
@@ -214,7 +202,6 @@ PLATE_RANGES = [
 
 
 def _plate_to_state(letters: str) -> str:
-    """Dado as 3 primeiras letras da placa, retorna o Estado de registro."""
     up = letters.upper()
     for start, end, state in PLATE_RANGES:
         if start <= up <= end:
@@ -223,7 +210,7 @@ def _plate_to_state(letters: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Utilitários
+# Utilitários de Formato e Validação
 # ---------------------------------------------------------------------------
 
 def digits_only(value: str) -> str:
@@ -234,16 +221,15 @@ def is_valid_cpf(digits: str) -> bool:
     """Valida CPF usando os dois dígitos verificadores (algoritmo oficial)."""
     if len(digits) != 11:
         return False
-    # CPFs com todos os dígitos iguais são inválidos
     if len(set(digits)) == 1:
         return False
-    # Primeiro dígito verificador
+    # 1º dígito verificador
     total = sum(int(digits[i]) * (10 - i) for i in range(9))
     rest = total % 11
     d1 = 0 if rest < 2 else 11 - rest
     if int(digits[9]) != d1:
         return False
-    # Segundo dígito verificador
+    # 2º dígito verificador
     total = sum(int(digits[i]) * (11 - i) for i in range(10))
     rest = total % 11
     d2 = 0 if rest < 2 else 11 - rest
@@ -251,34 +237,27 @@ def is_valid_cpf(digits: str) -> bool:
 
 
 def _looks_like_cpf_format(text: str) -> bool:
-    """Detecta formatação de CPF: 000.000.000-00"""
     return bool(re.fullmatch(r"\d{3}[.\s]?\d{3}[.\s]?\d{3}[-./\s]?\d{2}", text.strip()))
 
 
 def _looks_like_phone_format(text: str) -> bool:
-    """Detecta formatação de telefone: (00) 00000-0000, +55 11 99999-1234, etc."""
     return bool(re.search(r"[(\+]", text)) or bool(re.fullmatch(r"\d{2}\s?\d{4,5}[-\s]?\d{4}", text.strip()))
 
 
 def _looks_like_plate(text: str) -> bool:
-    """Detecta formatos de placa: ABC-1234, ABC1234, ABC1D23 (Mercosul)."""
     t = text.strip().upper().replace("-", "").replace(" ", "")
-    # Padrão antigo: AAA0000
     if re.fullmatch(r"[A-Z]{3}\d{4}", t):
         return True
-    # Padrão Mercosul: AAA0A00
     if re.fullmatch(r"[A-Z]{3}\d[A-Z]\d{2}", t):
         return True
     return False
 
 
 def _looks_like_domain(text: str) -> bool:
-    """Detecta domínios: google.com, site.com.br, etc."""
     return bool(re.fullmatch(r"[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+", text.strip()))
 
 
 def _looks_like_ip(text: str) -> bool:
-    """Detecta IPv4: 192.168.1.1"""
     return bool(re.fullmatch(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", text.strip()))
 
 
@@ -311,7 +290,7 @@ def classify_query(raw: str) -> dict:
     if len(digits) == 8 and not kinds:
         kinds.extend(["cep", "ncm"])
 
-    # ── Desambiguação inteligente para 11 dígitos (CPF vs Telefone) ──
+    # CPF vs Telefone (11 dígitos)
     if len(digits) == 11 and not kinds:
         cpf_format = _looks_like_cpf_format(text)
         phone_format = _looks_like_phone_format(text)
@@ -324,40 +303,56 @@ def classify_query(raw: str) -> dict:
         elif cpf_valid:
             kinds.append("cpf")
         else:
-            # CPF inválido e sem formatação de CPF → provavelmente telefone
             kinds.append("phone")
 
+    # CNPJ (14 dígitos)
     if len(digits) == 14 and not kinds:
         kinds.append("cnpj")
+
+    # DDD (2 dígitos)
     if len(digits) == 2 and not kinds:
         kinds.append("ddd")
+
+    # Telefone fixo (10 dígitos)
     if len(digits) == 10 and digits[:2] not in ("00",) and not kinds:
         kinds.append("phone")
+
+    # Código de banco (1 a 3 dígitos puros)
     if len(digits) in (1, 2, 3) and text.replace(" ", "") == digits and not kinds:
         kinds.append("bank")
+
+    # ISBN (10 ou 13 dígitos)
     if len(digits) in (10, 13) and not kinds:
         kinds.append("isbn")
+
+    # Ano
     if re.fullmatch(r"20\d{2}|19\d{2}", digits) and len(text.strip()) == 4 and not kinds:
         kinds.append("year")
-    if re.search(r"[A-Za-zÀ-ÿ]", text) and not kinds:
-        kinds.append("text")
+
+    # Nome / Texto
+    if re.search(r"[A-Za-zÀ-ÿ]", text) and "email" not in kinds and "domain" not in kinds and "plate" not in kinds:
+        kinds.append("name")
 
     kinds = list(dict.fromkeys(kinds))
     if not kinds:
-        kinds = ["text"] if re.search(r"[A-Za-zÀ-ÿ]", text) else ["unknown"]
+        kinds = ["name"] if re.search(r"[A-Za-zÀ-ÿ]", text) else ["unknown"]
 
     return {"raw": text, "digits": digits, "kinds": kinds}
 
 
 # ---------------------------------------------------------------------------
-# HTTP helper
+# HTTP Helper com headers adequados
 # ---------------------------------------------------------------------------
 
-def http_get_json(url: str, timeout: int = 12):
-    req = urllib.request.Request(
-        url,
-        headers={"Accept": "application/json", "User-Agent": USER_AGENT},
-    )
+def http_get_json(url: str, timeout: int = 10, headers: dict = None):
+    req_headers = {
+        "Accept": "application/json",
+        "User-Agent": USER_AGENT,
+    }
+    if headers:
+        req_headers.update(headers)
+
+    req = urllib.request.Request(url, headers=req_headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
@@ -367,7 +362,7 @@ def http_get_json(url: str, timeout: int = 12):
         try:
             body = json.loads(e.read().decode("utf-8"))
             if isinstance(body, dict):
-                detail = body.get("message") or body.get("name") or body.get("type") or detail
+                detail = body.get("message") or body.get("name") or body.get("detail") or detail
         except Exception:
             pass
         return None, {"code": e.code, "detail": str(detail)}
@@ -392,7 +387,7 @@ def flatten_payload(data, prefix=""):
             if compact:
                 rows.append((prefix or "lista", compact))
             return rows
-        for i, item in enumerate(data[:20]):
+        for i, item in enumerate(data[:15]):
             rows.extend(flatten_payload(item, f"{prefix}[{i}]" if prefix else f"[{i}]"))
         return rows
     if isinstance(data, dict):
@@ -438,43 +433,88 @@ def merge_fields(collected: list) -> list:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# FETCHERS — cada módulo retorna lista de chunks
+# FETCHERS ESPECÍFICOS DE INTELIGÊNCIA
 # ═══════════════════════════════════════════════════════════════════════════
 
 # ---------------------------------------------------------------------------
-# 1. ReceitaWS (CPF / CNPJ)
+# 1. Minha Receita (CNPJ, Sócios/QSA, CNAE, Capital Social)
+# ---------------------------------------------------------------------------
+
+def fetch_minhareceita(query: dict) -> list:
+    digits = query["digits"]
+    kinds = query["kinds"]
+    if "cnpj" not in kinds or len(digits) != 14:
+        return []
+
+    url = f"{MINHARECEITA}/{digits}"
+    payload, error = http_get_json(url, timeout=10)
+    if error:
+        return []
+    if not isinstance(payload, dict):
+        return []
+
+    data = {
+        "cnpj": payload.get("cnpj", digits),
+        "razao_social": payload.get("razao_social", ""),
+        "nome_fantasia": payload.get("nome_fantasia", ""),
+        "situacao_cadastral": payload.get("descricao_situacao_cadastral", ""),
+        "data_abertura": payload.get("data_inicio_atividade", ""),
+        "capital_social": f"R$ {payload.get('capital_social', 0):,.2f}" if payload.get("capital_social") else "",
+        "porte": payload.get("porte", ""),
+        "natureza_juridica": payload.get("natureza_juridica", ""),
+        "cnae_principal": payload.get("cnae_fiscal_descricao", ""),
+        "logradouro": f"{payload.get('descricao_tipo_de_logradouro', '')} {payload.get('logradouro', '')}".strip(),
+        "numero": str(payload.get("numero", "")),
+        "bairro": payload.get("bairro", ""),
+        "municipio": payload.get("municipio", ""),
+        "uf": payload.get("uf", ""),
+        "cep": payload.get("cep", ""),
+        "telefone": payload.get("ddd_telefone_1", ""),
+        "email": payload.get("email", ""),
+    }
+
+    # Sócios (QSA)
+    socios = payload.get("qsa", [])
+    if isinstance(socios, list) and socios:
+        qsa_list = []
+        for s in socios[:10]:
+            nome_socio = s.get("nome_socio", "")
+            qualificacao = s.get("qualificacao_socio", "")
+            faixa_etaria = s.get("faixa_etaria", "")
+            info = nome_socio
+            if qualificacao:
+                info += f" ({qualificacao})"
+            if faixa_etaria and faixa_etaria != "Não se aplica":
+                info += f" [{faixa_etaria}]"
+            if info:
+                qsa_list.append(info)
+        if qsa_list:
+            data["quadro_de_socios_qsa"] = " | ".join(qsa_list)
+
+    return [{"source": "minhareceita", "target": "cnpj", "data": {k: v for k, v in data.items() if v}}]
+
+
+# ---------------------------------------------------------------------------
+# 2. ReceitaWS (CNPJ)
 # ---------------------------------------------------------------------------
 
 def fetch_receitaws(query: dict) -> list:
-    jobs = []
     digits = query["digits"]
     kinds = query["kinds"]
-    if "cpf" in kinds and len(digits) == 11:
-        jobs.append(("cpf", f"{RECEITAWS}/cpf/{digits}"))
-    if "cnpj" in kinds and len(digits) == 14:
-        jobs.append(("cnpj", f"{RECEITAWS}/cnpj/{digits}"))
+    if "cnpj" not in kinds or len(digits) != 14:
+        return []
 
-    results = []
-    for label, url in jobs:
-        payload, error = http_get_json(url)
-        if error:
-            results.append({"error": {"source": "receitaws", "target": label, **error}})
-            continue
-        if isinstance(payload, dict) and str(payload.get("status", "")).upper() == "ERROR":
-            results.append({
-                "error": {
-                    "source": "receitaws",
-                    "target": label,
-                    "detail": payload.get("message", "Consulta não encontrada"),
-                }
-            })
-            continue
-        results.append({"source": "receitaws", "target": label, "data": payload})
-    return results
+    url = f"{RECEITAWS}/cnpj/{digits}"
+    payload, error = http_get_json(url, timeout=8)
+    if error:
+        return []
+    if isinstance(payload, dict) and str(payload.get("status", "")).upper() == "ERROR":
+        return []
+    return [{"source": "receitaws", "target": "cnpj", "data": payload}]
 
 
 # ---------------------------------------------------------------------------
-# 2. BrasilAPI (CEP, CNPJ, DDD, Bancos, NCM, ISBN, Feriados)
+# 3. BrasilAPI (CEP, CNPJ, DDD, Bancos, NCM, ISBN, Feriados)
 # ---------------------------------------------------------------------------
 
 def fetch_brasilapi(query: dict) -> list:
@@ -499,46 +539,83 @@ def fetch_brasilapi(query: dict) -> list:
         jobs.append(("isbn", f"{BRASILAPI}/isbn/v1/{digits}"))
     if "year" in kinds:
         jobs.append(("feriados", f"{BRASILAPI}/feriados/v1/{digits}"))
-    if "text" in kinds:
-        encoded = urllib.parse.quote(raw)
-        jobs.append(("ncm_busca", f"{BRASILAPI}/ncm/v1?search={encoded}"))
-        jobs.append(("bancos", f"{BRASILAPI}/banks/v1"))
-
-    # unique urls
-    seen_urls = set()
-    unique_jobs = []
-    for label, url in jobs:
-        if url in seen_urls:
-            continue
-        seen_urls.add(url)
-        unique_jobs.append((label, url))
 
     results = []
-    for label, url in unique_jobs:
-        payload, error = http_get_json(url)
-        if error:
-            results.append({"error": {"source": "brasilapi", "target": label, **error}})
+    for label, url in jobs:
+        payload, error = http_get_json(url, timeout=8)
+        if error or not payload:
             continue
-        if label == "bancos" and isinstance(payload, list):
-            needle = raw.lower()
-            filtered = [
-                bank for bank in payload
-                if needle in str(bank.get("name", "")).lower()
-                or needle in str(bank.get("fullName", "")).lower()
-            ][:12]
-            if not filtered:
-                continue
-            payload = filtered
-        if label == "ncm_busca" and isinstance(payload, list):
-            payload = payload[:12]
-            if not payload:
-                continue
         results.append({"source": "brasilapi", "target": label, "data": payload})
     return results
 
 
 # ---------------------------------------------------------------------------
-# 3. Telefone Intel — Operadora + Região + WhatsApp/Telegram
+# 4. Nome Intel — GitHub Search, Diários Oficiais, Transparência & OSINT
+# ---------------------------------------------------------------------------
+
+def fetch_name_intel(query: dict) -> list:
+    kinds = query["kinds"]
+    raw = query["raw"].strip()
+
+    if "name" not in kinds:
+        return []
+
+    data = {
+        "termo_pesquisado": raw,
+    }
+
+    # 1. GitHub Public Profiles by Name
+    try:
+        encoded_name = urllib.parse.quote(raw)
+        gh_url = f"{GITHUB_API}/search/users?q={encoded_name}+in:name&per_page=3"
+        gh_data, gh_err = http_get_json(gh_url, timeout=6)
+        if gh_data and isinstance(gh_data, dict) and gh_data.get("items"):
+            items = gh_data["items"]
+            first_user = items[0]
+            username = first_user.get("login", "")
+            avatar = first_user.get("avatar_url", "")
+            profile_url = first_user.get("html_url", "")
+
+            if avatar:
+                data["github_avatar"] = avatar
+            if username:
+                data["github_perfil_publico"] = profile_url or f"https://github.com/{username}"
+                # Buscar detalhes do perfil para bio / empresa / localização
+                u_data, _ = http_get_json(f"{GITHUB_API}/users/{username}", timeout=5)
+                if u_data and isinstance(u_data, dict):
+                    if u_data.get("name"):
+                        data["github_nome_completo"] = u_data["name"]
+                    if u_data.get("bio"):
+                        data["github_biografia"] = u_data["bio"]
+                    if u_data.get("company"):
+                        data["github_empresa"] = u_data["company"]
+                    if u_data.get("location"):
+                        data["github_localizacao"] = u_data["location"]
+                    if u_data.get("blog"):
+                        data["github_website"] = u_data["blog"]
+                    if u_data.get("twitter_username"):
+                        data["twitter_x"] = f"https://x.com/{u_data['twitter_username']}"
+    except Exception:
+        pass
+
+    # 2. Portal da Transparência do Governo Federal (Servidores / PEP / Benefícios)
+    encoded_query = urllib.parse.quote_plus(raw)
+    data["portal_transparencia_federal"] = f"https://portaldatransparencia.gov.br/busca?termo={encoded_query}"
+
+    # 3. Querido Diário / Diários Oficiais dos Municípios (Open Knowledge Brasil)
+    data["diarios_oficiais_municipais"] = f"https://queridodiario.ok.org.br/pesquisa?termo={encoded_query}"
+
+    # 4. Jusbrasil (Processos e Publicações Jurídicas)
+    data["jusbrasil_publicacoes"] = f"https://www.jusbrasil.com.br/busca?q={encoded_query}"
+
+    # 5. Escavador (Diários Oficiais & Pessoas)
+    data["escavador_diarios"] = f"https://www.escavador.com/busca?q={encoded_query}"
+
+    return [{"source": "nameint", "target": "nome_intel", "data": data}]
+
+
+# ---------------------------------------------------------------------------
+# 5. Telefone Intel — Operadora Anatel, WhatsApp, Telegram, Truecaller OSINT
 # ---------------------------------------------------------------------------
 
 def fetch_phone_intel(query: dict) -> list:
@@ -550,10 +627,7 @@ def fetch_phone_intel(query: dict) -> list:
     if len(digits) < 10:
         return []
 
-    results = []
     data = {}
-
-    # DDD → Estado
     ddd = digits[:2]
     state_code = DDD_STATE.get(ddd, "")
     state_name = STATE_NAMES.get(state_code, "")
@@ -561,50 +635,48 @@ def fetch_phone_intel(query: dict) -> list:
     if state_code:
         data["estado"] = f"{state_name} ({state_code})"
 
-    # Número formatado
     if len(digits) == 11:
         formatted = f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
-        data["número_formatado"] = formatted
+        data["numero_formatado"] = formatted
         data["tipo_linha"] = "Celular (9 dígitos)"
     elif len(digits) == 10:
         formatted = f"({digits[:2]}) {digits[2:6]}-{digits[6:]}"
-        data["número_formatado"] = formatted
+        data["numero_formatado"] = formatted
         data["tipo_linha"] = "Fixo (8 dígitos)"
 
-    # Operadora estimada (heurística por faixa)
+    # Operadora provável (faixa Anatel)
     if len(digits) >= 11 and digits[2] == "9":
         prefix_4 = digits[3:5]
         p = int(prefix_4) if prefix_4.isdigit() else 0
         if 60 <= p <= 69:
-            data["operadora_provável"] = "Vivo (Telefônica)"
+            data["operadora_provavel"] = "Vivo (Telefônica Brasil)"
         elif 70 <= p <= 79:
-            data["operadora_provável"] = "Claro (América Móvil)"
+            data["operadora_provavel"] = "Claro (América Móvil)"
         elif 80 <= p <= 89:
-            data["operadora_provável"] = "Oi"
+            data["operadora_provavel"] = "Oi Móvel"
         elif 90 <= p <= 99:
-            data["operadora_provável"] = "TIM"
+            data["operadora_provavel"] = "TIM Brasil"
         else:
-            data["operadora_provável"] = "Verificar (portabilidade possível)"
-        data["aviso_portabilidade"] = "Portabilidade pode alterar a operadora original"
+            data["operadora_provavel"] = "Operadora Geral (portabilidade possível)"
+        data["aviso_portabilidade"] = "Portabilidade numérica pode ter transferido a linha"
 
-    # Formato internacional
     intl = f"+55{digits}"
     data["formato_internacional"] = intl
-
-    # Links diretos
     data["whatsapp_link"] = f"https://wa.me/55{digits}"
     data["telegram_link"] = f"https://t.me/+55{digits}"
 
-    # Chave PIX
-    if len(digits) == 11:
-        data["possível_chave_pix"] = f"+55{digits}"
+    # OSINT Caller ID & Social Links
+    data["truecaller_osint"] = f"https://www.truecaller.com/search/br/{digits}"
+    data["syncme_osint"] = f"https://sync.me/search/?number=+55{digits}"
 
-    results.append({"source": "phoneint", "target": "telefone", "data": data})
-    return results
+    if len(digits) == 11:
+        data["possivel_chave_pix"] = f"+55{digits}"
+
+    return [{"source": "phoneint", "target": "telefone", "data": data}]
 
 
 # ---------------------------------------------------------------------------
-# 4. E-mail Intel — Gravatar + validação de domínio + anti-descartável
+# 6. E-mail Intel — Gravatar, GitHub Search, Validação MX, Anti-Descartável
 # ---------------------------------------------------------------------------
 
 def fetch_email_intel(query: dict) -> list:
@@ -614,26 +686,26 @@ def fetch_email_intel(query: dict) -> list:
     if "email" not in kinds:
         return []
 
-    results = []
-    data = {}
     email = raw.strip().lower()
     parts = email.split("@")
     if len(parts) != 2:
         return []
 
     local_part, domain = parts
-    data["email"] = email
-    data["usuário"] = local_part
-    data["domínio"] = domain
+    data = {
+        "email": email,
+        "usuario": local_part,
+        "dominio": domain,
+    }
 
-    # Verificação de e-mail descartável
+    # Descartável
     if domain in DISPOSABLE_DOMAINS:
-        data["⚠️ alerta"] = "Este e-mail usa um domínio DESCARTÁVEL/TEMPORÁRIO"
-        data["confiabilidade"] = "Baixa — e-mail temporário"
+        data["alerta_segurança"] = "⚠️ E-mail TEMPORÁRIO / DESCARTÁVEL (Baixa confiabilidade)"
+        data["confiabilidade"] = "Baixa — Domínio de descarte"
     else:
-        data["confiabilidade"] = "Normal"
+        data["confiabilidade"] = "Normal (Provedor ativo)"
 
-    # Provedor conhecido
+    # Provedor
     known_providers = {
         "gmail.com": "Google Gmail",
         "googlemail.com": "Google Gmail",
@@ -644,20 +716,18 @@ def fetch_email_intel(query: dict) -> list:
         "yahoo.com.br": "Yahoo Mail Brasil",
         "icloud.com": "Apple iCloud",
         "me.com": "Apple",
-        "protonmail.com": "ProtonMail (privacidade)",
-        "proton.me": "ProtonMail (privacidade)",
-        "uol.com.br": "UOL",
+        "protonmail.com": "ProtonMail (Criptografia Suíça)",
+        "proton.me": "ProtonMail",
+        "uol.com.br": "UOL Brasil",
         "bol.com.br": "BOL",
-        "terra.com.br": "Terra",
+        "terra.com.br": "Terra Brasil",
         "ig.com.br": "iG",
         "globo.com": "Globo.com",
-        "r7.com": "R7",
     }
-    provider = known_providers.get(domain, "")
-    if provider:
-        data["provedor"] = provider
+    if domain in known_providers:
+        data["provedor_identificado"] = known_providers[domain]
 
-    # Gravatar — foto e perfil público
+    # 1. Gravatar (Foto e Perfil)
     email_hash = hashlib.md5(email.encode("utf-8")).hexdigest()
     gravatar_url = f"https://www.gravatar.com/{email_hash}.json"
     try:
@@ -669,11 +739,10 @@ def fetch_email_intel(query: dict) -> list:
             if entry.get("aboutMe"):
                 data["gravatar_sobre"] = entry["aboutMe"]
             if entry.get("currentLocation"):
-                data["gravatar_localização"] = entry["currentLocation"]
+                data["gravatar_localizacao"] = entry["currentLocation"]
             photo_url = entry.get("thumbnailUrl", "")
             if photo_url:
                 data["gravatar_foto"] = photo_url
-            # Redes sociais do Gravatar
             accounts = entry.get("accounts", [])
             if accounts:
                 social_list = []
@@ -685,24 +754,42 @@ def fetch_email_intel(query: dict) -> list:
                     elif name:
                         social_list.append(name)
                 if social_list:
-                    data["gravatar_redes_sociais"] = " | ".join(social_list)
+                    data["gravatar_contas_vinculadas"] = " | ".join(social_list)
     except Exception:
         pass
 
-    # Verificação MX do domínio (valida se o domínio aceita e-mails)
+    # 2. GitHub Search by Email
+    try:
+        gh_url = f"{GITHUB_API}/search/users?q={email}+in:email"
+        gh_data, _ = http_get_json(gh_url, timeout=5)
+        if gh_data and isinstance(gh_data, dict) and gh_data.get("items"):
+            user = gh_data["items"][0]
+            uname = user.get("login", "")
+            avatar = user.get("avatar_url", "")
+            if uname:
+                data["github_conta_encontrada"] = f"https://github.com/{uname}"
+            if avatar and "gravatar_foto" not in data:
+                data["github_avatar"] = avatar
+    except Exception:
+        pass
+
+    # 3. Verificação MX do Domínio
     try:
         mx_records = socket.getaddrinfo(domain, 25, socket.AF_INET, socket.SOCK_STREAM)
         if mx_records:
-            data["servidor_email"] = "Domínio válido para receber e-mails"
+            data["servidor_de_email_mx"] = "✅ Domínio com servidor de e-mail ativo"
     except Exception:
-        data["servidor_email"] = "Não foi possível verificar o servidor de e-mail"
+        data["servidor_de_email_mx"] = "Não foi possível verificar os registros MX"
 
-    results.append({"source": "emailint", "target": "email", "data": data})
-    return results
+    # 4. Links OSINT de Redes Sociais
+    data["google_account_check"] = f"https://myaccount.google.com/?email={urllib.parse.quote(email)}"
+    data["instagram_recovery_check"] = "https://www.instagram.com/accounts/password/reset/"
+
+    return [{"source": "emailint", "target": "email", "data": data}]
 
 
 # ---------------------------------------------------------------------------
-# 5. CPF Intel — Estado Emissor da Receita Federal
+# 7. CPF Intel — Validação, Região Fiscal e Link Oficial
 # ---------------------------------------------------------------------------
 
 def fetch_cpf_intel(query: dict) -> list:
@@ -712,26 +799,29 @@ def fetch_cpf_intel(query: dict) -> list:
     if "cpf" not in kinds or len(digits) != 11:
         return []
 
-    data = {}
-    # Formata CPF
-    data["cpf_formatado"] = f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
+    data = {
+        "cpf_formatado": f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}",
+    }
 
     # 9º dígito → Região Fiscal
     ninth = digits[8]
-    region = CPF_REGION.get(ninth, "Desconhecida")
-    data["região_fiscal"] = f"Região {ninth} — {region}"
+    region = CPF_REGION.get(ninth, "Região Desconhecida")
+    data["regiao_fiscal_emissora"] = f"{region}"
 
-    # Validação
+    # Validação dos dígitos verificadores
     if is_valid_cpf(digits):
-        data["validação"] = "✅ CPF válido (dígitos verificadores corretos)"
+        data["validacao_oficial"] = "✅ CPF Válido (Dígitos verificadores corretos)"
     else:
-        data["validação"] = "❌ CPF inválido (dígitos verificadores não conferem)"
+        data["validacao_oficial"] = "❌ CPF Inválido (Dígitos verificadores não conferem)"
+
+    # Link oficial da Receita Federal
+    data["receita_federal_comprovante"] = "https://servicos.receitafederal.fazenda.gov.br/servicos/cpf/consultasituacao/consultapublica.asp"
 
     return [{"source": "cpfint", "target": "cpf_intel", "data": data}]
 
 
 # ---------------------------------------------------------------------------
-# 6. Placa Intel — Identificação de Estado e Formato
+# 8. Placa Intel — Padrão Mercosul/Antigo e Estado Denatran
 # ---------------------------------------------------------------------------
 
 def fetch_plate_intel(query: dict) -> list:
@@ -744,15 +834,12 @@ def fetch_plate_intel(query: dict) -> list:
     text = raw.strip().upper().replace("-", "").replace(" ", "")
     data = {}
 
-    # Detectar formato
     is_mercosul = bool(re.fullmatch(r"[A-Z]{3}\d[A-Z]\d{2}", text))
     is_old = bool(re.fullmatch(r"[A-Z]{3}\d{4}", text))
 
     if is_mercosul:
         data["formato"] = "Mercosul (AAA0A00)"
         data["placa_formatada"] = f"{text[:3]}{text[3]}{text[4]}{text[5:]}"
-        # Converter Mercosul → equivalente antigo para consultar estado
-        # A 5ª posição (letra) no Mercosul substitui o 5º dígito
         letter_pos = text[4]
         digit_equiv = str(ord(letter_pos) - ord("A"))
         old_equiv = text[:4] + digit_equiv + text[5:]
@@ -764,20 +851,19 @@ def fetch_plate_intel(query: dict) -> list:
         data["formato"] = "Formato não reconhecido"
         return [{"source": "plateint", "target": "placa", "data": data}]
 
-    # Estado de registro pelo prefixo de letras
     letters = text[:3]
     state_code = _plate_to_state(letters)
     if state_code:
         state_name = STATE_NAMES.get(state_code, state_code)
-        data["estado_registro"] = f"{state_name} ({state_code})"
+        data["estado_de_registro"] = f"{state_name} ({state_code})"
     else:
-        data["estado_registro"] = "Não identificado"
+        data["estado_de_registro"] = "Não identificado nas faixas Denatran"
 
     return [{"source": "plateint", "target": "placa", "data": data}]
 
 
 # ---------------------------------------------------------------------------
-# 7. IP / Domínio Intel — Geolocalização e RDAP
+# 9. IP / Domínio Intel — Geolocalização e RDAP Registro.br
 # ---------------------------------------------------------------------------
 
 def fetch_ip_domain_intel(query: dict) -> list:
@@ -785,100 +871,77 @@ def fetch_ip_domain_intel(query: dict) -> list:
     raw = query["raw"]
     results = []
 
-    # ── IP Geolocalização ──
     if "ip" in kinds:
         ip_addr = raw.strip()
-        data, err = http_get_json(f"http://ip-api.com/json/{ip_addr}?lang=pt-BR&fields=status,message,country,regionName,city,zip,lat,lon,timezone,isp,org,as,proxy,hosting,query", timeout=8)
+        data, err = http_get_json(
+            f"http://ip-api.com/json/{ip_addr}?lang=pt-BR&fields=status,message,country,regionName,city,zip,lat,lon,timezone,isp,org,as,proxy,hosting,query",
+            timeout=7
+        )
         if data and isinstance(data, dict) and data.get("status") == "success":
             ip_data = {
                 "ip": data.get("query", ip_addr),
-                "país": data.get("country", ""),
+                "pais": data.get("country", ""),
                 "estado": data.get("regionName", ""),
                 "cidade": data.get("city", ""),
                 "cep": data.get("zip", ""),
-                "provedor_internet": data.get("isp", ""),
-                "organização": data.get("org", ""),
-                "fuso_horário": data.get("timezone", ""),
+                "provedor_isp": data.get("isp", ""),
+                "organizacao": data.get("org", ""),
+                "fuso_horario": data.get("timezone", ""),
             }
             lat = data.get("lat")
             lon = data.get("lon")
             if lat and lon:
-                ip_data["coordenadas"] = f"{lat}, {lon}"
+                ip_data["coordenadas_gps"] = f"{lat}, {lon}"
                 ip_data["google_maps"] = f"https://www.google.com/maps?q={lat},{lon}"
             if data.get("proxy"):
-                ip_data["⚠️ proxy_vpn"] = "Este IP pertence a um Proxy/VPN"
-            if data.get("hosting"):
-                ip_data["tipo"] = "Servidor / Datacenter (hosting)"
-            else:
-                ip_data["tipo"] = "Residencial / Comercial"
+                ip_data["alerta_proxy"] = "⚠️ Conexão via Proxy / VPN detectada"
+            ip_data["tipo_conexao"] = "Datacenter / Hosting" if data.get("hosting") else "Residencial / Comercial"
             results.append({"source": "ipdomainint", "target": "ip", "data": ip_data})
-        elif err:
-            results.append({"error": {"source": "ipdomainint", "target": "ip", **err}})
 
-    # ── Domínio RDAP (Registro.br) ──
     if "domain" in kinds:
         domain = raw.strip().lower()
-        if domain.endswith(".br"):
-            rdap_url = f"https://rdap.registro.br/domain/{domain}"
-        else:
-            rdap_url = f"https://rdap.org/domain/{domain}"
-
-        data, err = http_get_json(rdap_url, timeout=8)
+        rdap_url = f"https://rdap.registro.br/domain/{domain}" if domain.endswith(".br") else f"https://rdap.org/domain/{domain}"
+        data, err = http_get_json(rdap_url, timeout=7)
         if data and isinstance(data, dict):
-            domain_data = {"domínio": domain}
-
-            # Nome e status
+            domain_data = {"dominio": domain}
             status_list = data.get("status", [])
             if status_list:
-                domain_data["status"] = ", ".join(status_list[:4])
-
-            # Entidades (titular, contato técnico, etc.)
+                domain_data["status_registro"] = ", ".join(status_list[:3])
             entities = data.get("entities", [])
-            for entity in entities[:5]:
+            for entity in entities[:4]:
                 roles = entity.get("roles", [])
-                vcard = entity.get("vcardArray", [])
                 handle = entity.get("handle", "")
-
                 role_label = ", ".join(roles) if roles else "entidade"
-
                 if handle:
-                    domain_data[f"{role_label}_id"] = handle
-
-                # Parse vCard para nome
+                    domain_data[f"{role_label}_documento"] = handle
+                vcard = entity.get("vcardArray", [])
                 if isinstance(vcard, list) and len(vcard) > 1:
                     for field in vcard[1]:
-                        if isinstance(field, list) and len(field) >= 4:
-                            if field[0] == "fn":
-                                domain_data[f"{role_label}_nome"] = field[3]
+                        if isinstance(field, list) and len(field) >= 4 and field[0] == "fn":
+                            domain_data[f"{role_label}_nome"] = field[3]
 
-            # Nameservers
             nss = data.get("nameservers", [])
             if nss:
                 ns_names = [ns.get("ldhName", "") for ns in nss[:4] if ns.get("ldhName")]
                 if ns_names:
                     domain_data["dns_servidores"] = ", ".join(ns_names)
 
-            # Datas
             events = data.get("events", [])
             for event in events:
                 action = event.get("eventAction", "")
                 date_val = event.get("eventDate", "")
                 if action == "registration" and date_val:
-                    domain_data["data_registro"] = date_val[:10]
+                    domain_data["data_criacao"] = date_val[:10]
                 elif action == "expiration" and date_val:
-                    domain_data["data_expiração"] = date_val[:10]
-                elif action == "last changed" and date_val:
-                    domain_data["última_alteração"] = date_val[:10]
+                    domain_data["data_expiracao"] = date_val[:10]
 
-            results.append({"source": "ipdomainint", "target": "domínio", "data": domain_data})
-        elif err:
-            results.append({"error": {"source": "ipdomainint", "target": "domínio", **err}})
+            results.append({"source": "ipdomainint", "target": "dominio", "data": domain_data})
 
     return results
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Motor principal de busca
+# Motor Principal de Busca
 # ═══════════════════════════════════════════════════════════════════════════
 
 def run_search(query_text: str, sources: list) -> dict:
@@ -888,8 +951,10 @@ def run_search(query_text: str, sources: list) -> dict:
         enabled = DEFAULT_SOURCES[:]
 
     fetchers = {
+        "minhareceita": fetch_minhareceita,
         "receitaws": fetch_receitaws,
         "brasilapi": fetch_brasilapi,
+        "nameint": fetch_name_intel,
         "phoneint": fetch_phone_intel,
         "emailint": fetch_email_intel,
         "cpfint": fetch_cpf_intel,
@@ -902,7 +967,7 @@ def run_search(query_text: str, sources: list) -> dict:
     used = []
     skipped = [api["id"] for api in AVAILABLE_APIS if api["id"] not in enabled]
 
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=8) as pool:
         futures = {
             pool.submit(fetchers[src], query): src
             for src in enabled
