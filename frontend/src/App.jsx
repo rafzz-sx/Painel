@@ -130,6 +130,20 @@ const IconApi = (props) => (
   </svg>
 );
 
+const IconTicket = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...IconBase} {...props}>
+    <path d="M2 9a3 3 0 0 1 3 3 3 3 0 0 1-3 3v4a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-4a3 3 0 0 1 0-6V5a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v4Z" />
+    <path d="m9 12 2 2 4-4" />
+  </svg>
+);
+
+const IconClose = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...IconBase} {...props}>
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </svg>
+);
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -445,6 +459,12 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [authToken, setAuthToken] = useState('');
   const [showAdmin, setShowAdmin] = useState(false);
+  const [systemOnline, setSystemOnline] = useState(null);
+  const [showTicketModal, setShowTicketModal] = useState(false);
+  const [ticketCategory, setTicketCategory] = useState('bug');
+  const [ticketMessage, setTicketMessage] = useState('');
+  const [ticketSending, setTicketSending] = useState(false);
+  const [ticketSuccess, setTicketSuccess] = useState('');
 
   const dashboardRef = useRef(null);
   const cardRef = useRef(null);
@@ -499,6 +519,11 @@ function App() {
         }
       })
       .catch(() => {});
+    // Health check pós-login
+    axios
+      .get(`${API}/health`, { timeout: 10000 })
+      .then(() => setSystemOnline(true))
+      .catch(() => setSystemOnline(false));
   }, [isLogged]);
 
   // Start/stop keep-alive when login state changes
@@ -876,7 +901,33 @@ function App() {
                   {userName}
                 </span>
               </h1>
-              <p className="text-sm sm:text-base text-ink-dim mt-2 max-w-xl">O Painel de Dados está pronto para uso.</p>
+              {systemOnline === true && (
+                <p className="text-sm sm:text-base text-ink-dim mt-2 max-w-xl flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-success animate-blink shrink-0" />
+                  Sistema online e pronto para uso.
+                </p>
+              )}
+              {systemOnline === false && (
+                <div className="mt-2 max-w-xl">
+                  <p className="text-sm text-danger flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-danger shrink-0" />
+                    O sistema está indisponível no momento.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowTicketModal(true)}
+                    className="mt-1.5 text-xs text-primary hover:text-ink underline underline-offset-2"
+                  >
+                    Enviar ticket ao administrador →
+                  </button>
+                </div>
+              )}
+              {systemOnline === null && (
+                <p className="text-sm text-ink-dim mt-2 max-w-xl flex items-center gap-2">
+                  <span className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} />
+                  Verificando sistema…
+                </p>
+              )}
               <div className="flex items-center gap-1.5 text-xs text-ink-dim mt-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-success animate-blink" />
                 <span className="font-mono truncate">{userEmail || userId}</span>
@@ -1127,6 +1178,113 @@ function App() {
             </div>
           </section>
         </div>
+
+        {/* ── Botão flutuante de ticket ── */}
+        <button
+          type="button"
+          onClick={() => { setShowTicketModal(true); setTicketSuccess(''); }}
+          className="ticket-fab"
+          title="Enviar ticket"
+        >
+          <IconTicket className="w-5 h-5" />
+        </button>
+
+        {/* ── Modal de Ticket ── */}
+        {showTicketModal && (
+          <div className="ticket-overlay" onClick={() => setShowTicketModal(false)}>
+            <div className="ticket-modal glass-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h3 className="font-display text-lg font-semibold text-ink">Enviar Ticket</h3>
+                  <p className="text-xs text-ink-dim mt-0.5">Reporte um problema ou envie uma ideia.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowTicketModal(false)}
+                  className="text-ink-dim hover:text-ink p-1 rounded-lg hover:bg-white/5"
+                >
+                  <IconClose className="w-5 h-5" />
+                </button>
+              </div>
+
+              {ticketSuccess ? (
+                <div className="flex flex-col items-center gap-3 py-6">
+                  <div className="w-12 h-12 rounded-full bg-success/15 flex items-center justify-center text-success">
+                    <IconCheck className="w-6 h-6" />
+                  </div>
+                  <p className="text-sm text-success font-medium">{ticketSuccess}</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowTicketModal(false)}
+                    className="text-xs text-ink-dim hover:text-ink mt-2"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              ) : (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setTicketSending(true);
+                    try {
+                      await axios.post(`${API}/tickets`, {
+                        user_id: userId,
+                        user_email: userEmail,
+                        category: ticketCategory,
+                        message: ticketMessage.trim(),
+                      });
+                      setTicketSuccess('Ticket enviado com sucesso! O admin será notificado.');
+                      setTicketMessage('');
+                      setTicketCategory('bug');
+                    } catch (err) {
+                      setTicketSuccess('');
+                      alert(err.response?.data?.detail || 'Erro ao enviar ticket.');
+                    } finally {
+                      setTicketSending(false);
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <label className="text-xs font-mono uppercase tracking-wider text-ink-dim mb-2 block">Categoria</label>
+                    <div className="flex gap-2">
+                      {[['bug', '🐛 Bug'], ['ideia', '💡 Ideia'], ['outro', '💬 Outro']].map(([val, label]) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setTicketCategory(val)}
+                          className={`ticket-cat-btn ${ticketCategory === val ? 'ticket-cat-btn--active' : ''}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-mono uppercase tracking-wider text-ink-dim mb-2 block">Mensagem</label>
+                    <textarea
+                      className="w-full bg-surface/70 border border-white/10 rounded-xl px-4 py-3 text-sm text-ink placeholder:text-ink-faint outline-none resize-none field-focus-ring"
+                      rows={4}
+                      placeholder="Descreva o problema ou sua ideia…"
+                      value={ticketMessage}
+                      onChange={(e) => setTicketMessage(e.target.value)}
+                      required
+                      maxLength={2000}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={ticketSending || !ticketMessage.trim()}
+                    className="btn-primary w-full flex items-center justify-center gap-2 text-white font-semibold text-sm rounded-xl py-3"
+                  >
+                    {ticketSending ? <span className="spinner" /> : <IconTicket className="w-4 h-4" />}
+                    Enviar ticket
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

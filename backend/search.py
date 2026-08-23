@@ -74,6 +74,36 @@ def digits_only(value: str) -> str:
     return re.sub(r"\D", "", value or "")
 
 
+def is_valid_cpf(digits: str) -> bool:
+    """Valida CPF usando os dois dígitos verificadores (algoritmo oficial)."""
+    if len(digits) != 11:
+        return False
+    # CPFs com todos os dígitos iguais são inválidos
+    if len(set(digits)) == 1:
+        return False
+    # Primeiro dígito verificador
+    total = sum(int(digits[i]) * (10 - i) for i in range(9))
+    rest = total % 11
+    d1 = 0 if rest < 2 else 11 - rest
+    if int(digits[9]) != d1:
+        return False
+    # Segundo dígito verificador
+    total = sum(int(digits[i]) * (11 - i) for i in range(10))
+    rest = total % 11
+    d2 = 0 if rest < 2 else 11 - rest
+    return int(digits[10]) == d2
+
+
+def _looks_like_cpf_format(text: str) -> bool:
+    """Detecta formatação de CPF: 000.000.000-00"""
+    return bool(re.fullmatch(r"\d{3}[.\s]?\d{3}[.\s]?\d{3}[-./\s]?\d{2}", text.strip()))
+
+
+def _looks_like_phone_format(text: str) -> bool:
+    """Detecta formatação de telefone: (00) 00000-0000, +55 11 99999-1234, etc."""
+    return bool(re.search(r"[(\+]", text)) or bool(re.fullmatch(r"\d{2}\s?\d{4,5}[-\s]?\d{4}", text.strip()))
+
+
 def classify_query(raw: str) -> dict:
     text = (raw or "").strip()
     digits = digits_only(text)
@@ -83,13 +113,28 @@ def classify_query(raw: str) -> dict:
         kinds.append("email")
     if len(digits) == 8:
         kinds.extend(["cep", "ncm"])
+
+    # ── Desambiguação inteligente para 11 dígitos (CPF vs Telefone) ──
     if len(digits) == 11:
-        kinds.extend(["cpf", "phone"])
+        cpf_format = _looks_like_cpf_format(text)
+        phone_format = _looks_like_phone_format(text)
+        cpf_valid = is_valid_cpf(digits)
+
+        if cpf_format and cpf_valid:
+            kinds.append("cpf")
+        elif phone_format:
+            kinds.append("phone")
+        elif cpf_valid:
+            kinds.append("cpf")
+        else:
+            # CPF inválido e sem formatação de CPF → provavelmente telefone
+            kinds.append("phone")
+
     if len(digits) == 14:
         kinds.append("cnpj")
     if len(digits) == 2:
         kinds.append("ddd")
-    if len(digits) in (10, 11) and digits[:2] not in ("00",):
+    if len(digits) == 10 and digits[:2] not in ("00",):
         kinds.append("phone")
     if len(digits) in (1, 2, 3) and text.replace(" ", "") == digits and "cep" not in kinds and "cpf" not in kinds and "cnpj" not in kinds:
         kinds.append("bank")

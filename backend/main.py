@@ -408,6 +408,52 @@ async def admin_update_apis(user_id: str, request: Request, authorization: Optio
     return JSONResponse({"status": "updated", "user": user_id, "enabled_apis": cleaned})
 
 
+# ── Tickets ────────────────────────────────────────────────────────────────
+
+@app.post("/tickets")
+async def create_ticket(request: Request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    user_email = data.get("user_email", "")
+    category = data.get("category", "bug")
+    message = (data.get("message") or "").strip()
+    if not user_id or not message:
+        raise HTTPException(status_code=400, detail="user_id e message são obrigatórios")
+    if category not in ("bug", "ideia", "outro"):
+        category = "outro"
+    if len(message) > 2000:
+        raise HTTPException(status_code=400, detail="Mensagem muito longa (máx. 2000 caracteres)")
+    result = db.create_ticket(user_id, user_email, category, message)
+    write_activity(user_id, f"ticket criado: {category}", {"ticket_id": result["id"]}, request)
+    return JSONResponse({"status": "created", **result})
+
+
+@app.get("/admin/tickets")
+async def admin_tickets(
+    authorization: Optional[str] = Header(None),
+    status: Optional[str] = Query(None),
+):
+    _verify_admin_token(authorization)
+    status_filter = status if status in ("aberto", "resolvido") else None
+    tickets = db.list_tickets(status_filter)
+    open_count = db.count_open_tickets()
+    return JSONResponse({"tickets": tickets, "open_count": open_count})
+
+
+@app.patch("/admin/tickets/{ticket_id}")
+async def admin_resolve_ticket(ticket_id: int, request: Request, authorization: Optional[str] = Header(None)):
+    admin = _verify_admin_token(authorization)
+    result = db.resolve_ticket(ticket_id)
+    write_activity(
+        admin.get("user_id", "admin"),
+        f"ticket #{ticket_id} resolvido",
+        {"ticket_id": ticket_id, "admin": admin.get("email")},
+        request,
+    )
+    return JSONResponse(result)
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run(app, host="0.0.0.0", port=port)
+

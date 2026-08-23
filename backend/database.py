@@ -48,6 +48,17 @@ def init_db():
                 timestamp TEXT NOT NULL DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_logs(user_id);
+            CREATE TABLE IF NOT EXISTS tickets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                user_email TEXT NOT NULL DEFAULT '',
+                category TEXT NOT NULL DEFAULT 'bug',
+                message TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'aberto',
+                created_at TEXT NOT NULL DEFAULT '',
+                resolved_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
         """)
         c.commit()
         c.close()
@@ -175,6 +186,62 @@ def get_user_history(user_id, limit=200):
             **d.get("extra", {}),
         })
     return items
+
+
+# ---------------------------------------------------------------------------
+# Tickets
+# ---------------------------------------------------------------------------
+
+def create_ticket(user_id, user_email, category, message):
+    """Cria um ticket de suporte."""
+    now = datetime.now().isoformat()
+    with _lock:
+        c = _conn()
+        c.execute(
+            "INSERT INTO tickets (user_id, user_email, category, message, status, created_at) VALUES (?,?,?,?,?,?)",
+            (user_id, user_email, category, message, "aberto", now),
+        )
+        c.commit()
+        ticket_id = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+        c.close()
+    return {"id": ticket_id, "status": "aberto", "created_at": now}
+
+
+def list_tickets(status_filter=None):
+    """Lista todos os tickets. Filtra por status se informado."""
+    with _lock:
+        c = _conn()
+        if status_filter:
+            rows = c.execute(
+                "SELECT * FROM tickets WHERE status = ? ORDER BY created_at DESC", (status_filter,)
+            ).fetchall()
+        else:
+            rows = c.execute("SELECT * FROM tickets ORDER BY created_at DESC").fetchall()
+        c.close()
+    return [dict(r) for r in rows]
+
+
+def resolve_ticket(ticket_id):
+    """Marca ticket como resolvido."""
+    now = datetime.now().isoformat()
+    with _lock:
+        c = _conn()
+        c.execute(
+            "UPDATE tickets SET status = 'resolvido', resolved_at = ? WHERE id = ?",
+            (now, ticket_id),
+        )
+        c.commit()
+        c.close()
+    return {"id": ticket_id, "status": "resolvido", "resolved_at": now}
+
+
+def count_open_tickets():
+    """Conta tickets abertos."""
+    with _lock:
+        c = _conn()
+        row = c.execute("SELECT COUNT(*) FROM tickets WHERE status = 'aberto'").fetchone()
+        c.close()
+    return row[0] if row else 0
 
 
 # Inicializa ao importar
