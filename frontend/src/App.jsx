@@ -598,22 +598,30 @@ function App() {
     }
   }, [isLogged, isTransitioning, animateDashboardEntry]);
 
+  const checkHealth = useCallback(async () => {
+    try {
+      await axios.get(`${API}/health`, { timeout: 30000 });
+      setSystemOnline(true);
+    } catch {
+      setSystemOnline(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isLogged) return;
     axios
-      .get(`${API}/apis`)
+      .get(`${API}/apis`, { timeout: 30000 })
       .then((response) => {
         if (Array.isArray(response.data?.apis) && response.data.apis.length) {
           setCatalogApis(response.data.apis);
         }
       })
       .catch(() => {});
-    // Health check pós-login
-    axios
-      .get(`${API}/health`, { timeout: 10000 })
-      .then(() => setSystemOnline(true))
-      .catch(() => setSystemOnline(false));
-  }, [isLogged]);
+
+    checkHealth();
+    const interval = setInterval(checkHealth, 30000);
+    return () => clearInterval(interval);
+  }, [isLogged, checkHealth]);
 
   // Start/stop keep-alive when login state changes
   useEffect(() => {
@@ -635,6 +643,7 @@ function App() {
     if (Array.isArray(data.enabled_apis)) {
       setEnabledApis(data.enabled_apis);
     }
+    setSystemOnline(true);
     setShowWarmUp(false);
     setIsLogged(true);
     setIsTransitioning(false);
@@ -1000,15 +1009,25 @@ function App() {
                 <div className="mt-2 max-w-xl">
                   <p className="text-sm text-danger flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-danger shrink-0" />
-                    O sistema está indisponível no momento.
+                    O sistema demorou para responder.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowTicketModal(true)}
-                    className="mt-1.5 text-xs text-primary hover:text-ink underline underline-offset-2"
-                  >
-                    Enviar ticket ao administrador →
-                  </button>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={checkHealth}
+                      className="text-xs text-primary hover:text-ink underline underline-offset-2 font-medium"
+                    >
+                      🔄 Tentar reconectar
+                    </button>
+                    <span className="text-ink-faint text-xs">·</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowTicketModal(true)}
+                      className="text-xs text-ink-dim hover:text-ink underline underline-offset-2"
+                    >
+                      Enviar ticket ao administrador →
+                    </button>
+                  </div>
                 </div>
               )}
               {systemOnline === null && (

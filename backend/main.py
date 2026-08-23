@@ -22,21 +22,10 @@ ADMIN_EMAIL = (os.getenv("ADMIN_EMAIL") or "").strip().lower()
 
 app = FastAPI(title="Painel de Dados API")
 
-_default_origins = (
-    "http://localhost:5173,http://127.0.0.1:5173,"
-    "http://localhost,capacitor://localhost,https://localhost,"
-    "https://painel-25xg-silk.vercel.app,https://painel-y9f9.onrender.com"
-)
-origin_list = [
-    item.strip()
-    for item in os.getenv("FRONTEND_ORIGINS", _default_origins).split(",")
-    if item.strip()
-]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origin_list,
-    allow_origin_regex=r"https://.*\.(vercel\.app|onrender\.com)",
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
