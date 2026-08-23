@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { API, authHeaders } from './api';
+import { formatBRDateTime } from './App';
 
 const CATEGORY_LABELS = {
   bug: { emoji: '🐛', label: 'Bug', color: 'text-danger' },
@@ -338,7 +339,7 @@ export default function AdminDashboard({ token, onBack, catalogApis }) {
                     {history.map((item) => (
                       <div key={item.id} className="rounded-lg bg-surface/50 px-3 py-2">
                         <p className="text-xs text-ink">{item.action}</p>
-                        <p className="text-[10px] font-mono text-ink-faint mt-0.5">{item.timestamp?.replace('T', ' ').slice(0, 16)}</p>
+                        <p className="text-[10px] font-mono text-ink-faint mt-0.5">{formatBRDateTime(item.timestamp)}</p>
                       </div>
                     ))}
                   </div>
@@ -491,7 +492,7 @@ export default function AdminDashboard({ token, onBack, catalogApis }) {
                   <div className="p-3.5 rounded-xl bg-white/5 border border-white/10">
                     <div className="flex items-center justify-between text-[11px] font-mono text-ink-faint mb-1.5">
                       <span className="font-semibold text-primary">{selectedTicket.user_name} (Mensagem Inicial)</span>
-                      <span>{selectedTicket.created_at?.replace('T', ' ').slice(0, 16)}</span>
+                      <span>{formatBRDateTime(selectedTicket.created_at)}</span>
                     </div>
                     <p className="text-sm text-ink leading-relaxed whitespace-pre-wrap">{selectedTicket.message}</p>
                   </div>
@@ -512,7 +513,7 @@ export default function AdminDashboard({ token, onBack, catalogApis }) {
                           <span className={isAdmin ? 'font-semibold text-primary' : 'font-semibold text-ink'}>
                             {isAdmin ? '🛡️ ' + (resp.sender_name || 'Admin') : resp.sender_name || 'Usuário'}
                           </span>
-                          <span className="text-ink-faint">{resp.created_at?.replace('T', ' ').slice(0, 16)}</span>
+                          <span className="text-ink-faint">{formatBRDateTime(resp.created_at || resp.timestamp)}</span>
                         </div>
                         <p className="text-sm text-ink leading-relaxed whitespace-pre-wrap">{resp.message}</p>
                       </div>

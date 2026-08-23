@@ -55,6 +55,34 @@ function formatRemainingTime(expiresAt) {
   return `${hours}h ${minutes}m restantes`;
 }
 
+export function formatBRDateTime(isoString) {
+  if (!isoString) return '—';
+  try {
+    const raw = String(isoString);
+    const d = new Date(raw.endsWith('Z') ? raw : raw + 'Z');
+    if (isNaN(d.getTime())) {
+      const clean = raw.replace('T', ' ');
+      const [datePart, timePart] = clean.split(' ');
+      if (datePart && timePart) {
+        const [y, m, day] = datePart.split('-');
+        return `${day}/${m}/${y} às ${timePart.slice(0, 5)}`;
+      }
+      return isoString;
+    }
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'America/Sao_Paulo',
+    }).format(d).replace(', ', ' às ');
+  } catch {
+    return isoString;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Constants & Config
 // ---------------------------------------------------------------------------
@@ -341,6 +369,10 @@ function renderValue(value) {
       linkLabel = '📰 Diário Oficial da União (DOU) ↗';
       btnClass = 'text-purple-400 border-purple-400/30 bg-purple-400/10 hover:bg-purple-400/20';
       explanation = 'Consulta de publicações de concursos públicos, nomeações, licitações e atos oficiais da União.';
+    } else if (str.includes('regularize.pgfn.gov.br')) {
+      linkLabel = '🏛️ Regularidade Fiscal & Dívida Ativa (PGFN) ↗';
+      btnClass = 'text-amber border-amber/30 bg-amber/10 hover:bg-amber/20';
+      explanation = 'Consulta pública no portal REGULARIZE da Fazenda Nacional para checar débitos federais e certidões negativas na Dívida Ativa da União.';
     } else if (str.includes('queridodiario')) {
       linkLabel = '📰 Diários Oficiais dos Municípios ↗';
       btnClass = 'text-purple-400 border-purple-400/30 bg-purple-400/10 hover:bg-purple-400/20';
@@ -967,7 +999,7 @@ function App() {
               </div>
               <div>
                 <h1 className="font-display text-2xl font-bold text-ink">Painel de Dados</h1>
-                <p className="text-xs text-ink-dim">Inteligência unificada e busca avançada</p>
+                <p className="text-xs text-ink-dim">Inteligência de busca avançada</p>
               </div>
             </div>
 
@@ -1386,7 +1418,14 @@ function App() {
                       ) : (
                         <div className="flex flex-col h-full space-y-3">
                           <div className="border-b border-white/10 pb-2 flex items-center justify-between">
-                            <span className="text-xs font-semibold text-ink">Ticket #{selectedUserTicket.id}</span>
+                            <div>
+                              <span className="text-xs font-semibold text-ink">Ticket #{selectedUserTicket.id}</span>
+                              {selectedUserTicket.created_at && (
+                                <span className="text-[10px] font-mono text-ink-faint ml-2">
+                                  {formatBRDateTime(selectedUserTicket.created_at)}
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[10px] font-mono text-ink-faint">
                               Status: {selectedUserTicket.status}
                             </span>
@@ -1394,7 +1433,14 @@ function App() {
 
                           <div className="flex-1 overflow-auto space-y-2 max-h-48 pr-1 text-xs">
                             <div className="p-2.5 rounded-lg bg-white/5 border border-white/10">
-                              <p className="text-[10px] font-mono text-primary font-semibold">Você (Mensagem Inicial):</p>
+                              <div className="flex items-center justify-between mb-0.5">
+                                <p className="text-[10px] font-mono text-primary font-semibold">Você (Mensagem Inicial):</p>
+                                {selectedUserTicket.created_at && (
+                                  <span className="text-[9px] font-mono text-ink-faint">
+                                    {formatBRDateTime(selectedUserTicket.created_at)}
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-ink mt-0.5">{selectedUserTicket.message}</p>
                             </div>
 
@@ -1407,9 +1453,16 @@ function App() {
                                     : 'bg-white/5 border-white/10 mr-3'
                                 }`}
                               >
-                                <p className="text-[10px] font-mono font-semibold text-primary">
-                                  {resp.sender_type === 'admin' ? '🛡️ Resposta do Admin:' : 'Você:'}
-                                </p>
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <p className="text-[10px] font-mono font-semibold text-primary">
+                                    {resp.sender_type === 'admin' ? '🛡️ Resposta do Admin:' : 'Você:'}
+                                  </p>
+                                  {resp.timestamp && (
+                                    <span className="text-[9px] font-mono text-ink-faint">
+                                      {formatBRDateTime(resp.timestamp)}
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-ink mt-0.5">{resp.message}</p>
                               </div>
                             ))}
@@ -1459,7 +1512,7 @@ function App() {
                             <div className="min-w-0">
                               <p className="text-xs font-medium text-ink truncate">{term}</p>
                               <p className="text-[10px] font-mono text-ink-faint mt-0.5">
-                                {item.timestamp?.replace('T', ' ').slice(0, 16)}
+                                {formatBRDateTime(item.timestamp)}
                               </p>
                             </div>
                             <button

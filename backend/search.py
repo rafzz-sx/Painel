@@ -989,31 +989,50 @@ def fetch_cross_intelligence(query: dict) -> list:
     raw = query["raw"].strip()
     data = {}
 
-    # 1. Se for CPF (NÃO trata como telefone!)
+    # 1. Dossiê Completo por CPF
     if "cpf" in kinds and len(digits) == 11:
         data["chave_pix_cpf"] = f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
+        data["formato_bancario_spi"] = f"{digits}"
         data["consulta_bancos_registrato"] = "https://registrato.bcb.gov.br/registrato/"
         data["aviso_registrato_bacen"] = "Extrato oficial do Banco Central de todas as contas e chaves PIX abertas no CPF (CCS/SCR)"
-        data["busca_nome_em_diarios_e_processos"] = f"https://www.jusbrasil.com.br/busca?q={digits}"
+        data["investigacao_societaria_qsa"] = f"https://www.jusbrasil.com.br/busca?q={digits}+socio"
+        data["regularidade_fiscal_divida_ativa_pgfn"] = "https://www.regularize.pgfn.gov.br/"
+        data["pesquisa_processual_unificada_tribunais"] = f"https://www.jusbrasil.com.br/busca?q={digits}"
+        data["diarios_oficiais_e_concursos_dou"] = f"https://www.in.gov.br/consulta/-/buscar/dou?q={digits}"
         data["portal_transparencia_federal"] = f"https://portaldatransparencia.gov.br/busca?termo={digits}"
+        data["comprovante_receita_federal"] = "https://servicos.receitafederal.fazenda.gov.br/servicos/cpf/consultasituacao/consultapublica.asp"
+        data["conectesus_cartao_nacional_saude"] = "https://conectesus-paciente.saude.gov.br/"
 
-    # 2. Se for Telefone (Apenas se NÃO for CPF!)
+    # 2. Dossiê Completo por Telefone
     elif "phone" in kinds and "cpf" not in kinds:
         if len(digits) in (10, 11):
             data["chave_pix_telefone"] = f"+55{digits}"
             data["formato_bancario_spi"] = f"55{digits}"
+            data["consulta_portabilidade_abr_telecom"] = "https://consultanumero.abrtelecom.com.br/consultanumero/consulta/consultaSituacaoAtualCtg.action"
+            data["truecaller_identificador"] = f"https://www.truecaller.com/search/br/{digits}"
+            data["syncme_identificador"] = f"https://sync.me/search/?number=+55{digits}"
+            data["whatsapp_link"] = f"https://wa.me/55{digits}"
+            data["telegram_link"] = f"https://t.me/+55{digits}"
 
-    # 3. Se for E-mail
+    # 3. Dossiê Completo por E-mail
     if "email" in kinds:
         data["chave_pix_email"] = raw.lower()
         data["verificador_vazamentos_pwned"] = f"https://haveibeenpwned.com/account/{urllib.parse.quote(raw)}"
         data["aviso_seguranca_digital"] = "Verifica se este e-mail constou em vazamentos de dados conhecidos"
+        data["google_account_check"] = f"https://myaccount.google.com/?email={urllib.parse.quote(raw)}"
 
-    # 4. Investigação de Sociedades e Empresas (QSA Reverso por Nome)
+    # 4. Dossiê Completo por Nome
     if "name" in kinds:
         encoded_name = urllib.parse.quote_plus(raw)
+        data["investigacao_societaria_qsa"] = f"https://www.jusbrasil.com.br/busca?q={encoded_name}+socio"
         data["consulta_socios_receita_federal"] = f"https://portaldatransparencia.gov.br/busca?termo={encoded_name}"
-        data["busca_empresas_como_socio"] = f"https://www.jusbrasil.com.br/busca?q={encoded_name}+socio"
+        data["pesquisa_processual_unificada_tribunais"] = f"https://www.jusbrasil.com.br/busca?q={encoded_name}"
+        data["processos_escavador"] = f"https://www.escavador.com/busca?q={encoded_name}"
+        data["diarios_oficiais_municipais"] = "https://queridodiario.ok.org.br/"
+        data["diarios_oficiais_e_concursos_dou"] = f"https://www.in.gov.br/consulta/-/buscar/dou?q={encoded_name}"
+        data["perfil_github"] = f"https://github.com/search?q={encoded_name}&type=users"
+        data["perfil_linkedin"] = f"https://www.linkedin.com/search/results/all/?keywords={encoded_name}"
+        data["comunidade_discord"] = f"https://discord.com/search?q={encoded_name}"
 
     if not data:
         return []
