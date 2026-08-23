@@ -60,28 +60,40 @@ def _load_service_account_info():
     return None
 
 
+_firebase_inited = False
+db = None
+
 def init_firebase():
+    global _firebase_inited, db
     if firebase_admin._apps:
-        return
+        _firebase_inited = True
+        if db is None:
+            try:
+                db = firestore.client()
+            except Exception as exc:
+                print(f"Aviso Firestore client: {exc}")
+        return True
     info = _load_service_account_info()
     if not info:
-        raise RuntimeError(
-            "Firebase Admin não configurado no Render. "
-            "FIREBASE_WEB_API_KEY (Web API Key) NÃO serve para isso. "
-            "No Render → Environment, defina FIREBASE_SERVICE_ACCOUNT_JSON "
-            "com o JSON inteiro de backend/serviceAccountKey.json "
-            "OU as variáveis FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY."
-        )
-    firebase_admin.initialize_app(credentials.Certificate(info))
+        print("AVISO: Credenciais Firebase Admin Service Account não encontradas. O painel funcionará com Firebase Web API.")
+        return False
+    try:
+        firebase_admin.initialize_app(credentials.Certificate(info))
+        _firebase_inited = True
+        try:
+            db = firestore.client()
+        except Exception as exc:
+            print(f"Aviso Firestore client: {exc}")
+        return True
+    except Exception as exc:
+        print(f"Aviso ao inicializar Firebase Admin: {exc}")
+        return False
 
 
-init_firebase()
-db = firestore.client()
-
-if not FIREBASE_WEB_API_KEY:
-    print("AVISO: FIREBASE_WEB_API_KEY não definida. O login vai falhar.")
-if not ADMIN_EMAIL:
-    print("AVISO: ADMIN_EMAIL não definida. O painel admin ficará inacessível.")
+try:
+    init_firebase()
+except Exception as _e:
+    print(f"Aviso na inicialização do Firebase: {_e}")
 
 app = FastAPI(title="Painel de Dados API")
 

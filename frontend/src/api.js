@@ -9,11 +9,12 @@ const RENDER_API = 'https://painel-y9f9.onrender.com';
  */
 function resolveApi() {
   if (typeof window === 'undefined') {
-    return import.meta.env.DEV ? 'http://localhost:8000' : '/api';
+    return import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : RENDER_API);
   }
-  const host = window.location.hostname;
-  if (host.includes('vercel.app')) return '/api';
-  if (host === 'localhost' || host === '127.0.0.1') {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     return import.meta.env.DEV ? 'http://localhost:8000' : RENDER_API;
   }
   return RENDER_API;
