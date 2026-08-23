@@ -651,21 +651,24 @@ def fetch_phone_intel(query: dict) -> list:
         data["numero_formatado"] = formatted
         data["tipo_linha"] = "Fixo (8 dígitos)"
 
-    # Operadora provável (faixa Anatel)
+    # Faixa original de registro na Anatel
     if len(digits) >= 11 and digits[2] == "9":
         prefix_4 = digits[3:5]
         p = int(prefix_4) if prefix_4.isdigit() else 0
         if 60 <= p <= 69:
-            data["operadora_provavel"] = "Vivo (Telefônica Brasil)"
+            data["faixa_original_anatel"] = "Vivo (Telefônica Brasil) — Registro Inicial"
         elif 70 <= p <= 79:
-            data["operadora_provavel"] = "Claro (América Móvil)"
+            data["faixa_original_anatel"] = "Claro (América Móvil) — Registro Inicial"
         elif 80 <= p <= 89:
-            data["operadora_provavel"] = "Oi Móvel"
+            data["faixa_original_anatel"] = "Oi Móvel — Registro Inicial"
         elif 90 <= p <= 99:
-            data["operadora_provavel"] = "TIM Brasil"
+            data["faixa_original_anatel"] = "TIM Brasil — Registro Inicial"
         else:
-            data["operadora_provavel"] = "Operadora Geral (portabilidade possível)"
-        data["aviso_portabilidade"] = "Portabilidade numérica pode ter transferido a linha"
+            data["faixa_original_anatel"] = "Faixa Geral Anatel"
+        data["aviso_portabilidade"] = "Atenção: A linha pode ter sido transferida (Portabilidade Numérica ativa)"
+
+    # Base Oficial ABR Telecom (Consulta de Portabilidade em Tempo Real)
+    data["consulta_portabilidade_abr_telecom"] = "https://consultanumero.abrtelecom.com.br/consultanumero/consulta/consultaSituacaoAtualCtg.action"
 
     intl = f"+55{digits}"
     data["formato_internacional"] = intl
@@ -675,6 +678,7 @@ def fetch_phone_intel(query: dict) -> list:
     # OSINT Caller ID & Social Links
     data["truecaller_osint"] = f"https://www.truecaller.com/search/br/{digits}"
     data["syncme_osint"] = f"https://sync.me/search/?number=+55{digits}"
+    data["conectesus_ministerio_saude"] = "https://conectesus-paciente.saude.gov.br/"
 
     if len(digits) == 11:
         data["possivel_chave_pix"] = f"+55{digits}"

@@ -24,15 +24,15 @@ body {
   color: #fff;
 }
 
-/* Scrollbar, kept quiet and in-system */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: transparent; }
+/* Scrollbar, clearly visible and elegant */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.03); border-radius: 999px; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(132, 146, 166, 0.25);
+  background: rgba(58, 167, 255, 0.35);
   border-radius: 999px;
-  border: 2px solid #070B12;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(132, 146, 166, 0.4); }
+::-webkit-scrollbar-thumb:hover { background: rgba(58, 167, 255, 0.6); }
 
 /* ---------- Ambient backdrop ---------- */
 

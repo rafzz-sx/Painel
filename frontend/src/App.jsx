@@ -7,7 +7,7 @@ import AdminDashboard from './AdminDashboard';
 import './styles/index.css';
 
 const APP_VERSION = 'v3.2.0';
-const APP_BUILD_TIME = '23/08 às 18:40';
+const APP_BUILD_TIME = '23/08 às 19:30';
 const SESSION_KEY = 'painel_auth_session';
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 horas de sessão contínua
 
@@ -64,7 +64,7 @@ const DEFAULT_APIS = [
   { id: 'receitaws', name: 'ReceitaWS', supports: ['CNPJ'] },
   { id: 'brasilapi', name: 'BrasilAPI', supports: ['CNPJ', 'CEP', 'DDD', 'Feriados'] },
   { id: 'nameint', name: 'Nome Intel (Pessoas & Diários)', supports: ['Nome', 'GitHub', 'Transparência', 'Jusbrasil', 'SUS', 'Discord'] },
-  { id: 'phoneint', name: 'Telefone Intel', supports: ['Operadora', 'WhatsApp', 'Telegram', 'Truecaller', 'SUS'] },
+  { id: 'phoneint', name: 'Telefone Intel', supports: ['Operadora', 'Portabilidade', 'ABR Telecom', 'WhatsApp', 'Telegram', 'Truecaller', 'SUS'] },
   { id: 'emailint', name: 'E-mail Intel', supports: ['Gravatar', 'GitHub', 'MX DNS', 'Anti-Spam'] },
   { id: 'cpfint', name: 'CPF Intel', supports: ['Validação', 'Região Fiscal', 'Receita Federal', 'ConecteSUS'] },
   { id: 'plateint', name: 'Placa Intel', supports: ['Mercosul', 'Denatran UF'] },
@@ -259,11 +259,6 @@ function describeSearchError(error) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getInitial(name) {
-  if (!name) return 'U';
-  return name.trim().charAt(0).toUpperCase();
-}
-
 function formatLabel(key) {
   return key
     .replace(/[._]/g, ' ')
@@ -277,60 +272,97 @@ function renderValue(value) {
   // Imagens de avatar
   if (str.startsWith('http') && (str.includes('avatar') || str.includes('gravatar') || str.endsWith('.png') || str.endsWith('.jpg'))) {
     return (
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3.5 py-1">
         <img src={str} alt="Foto de perfil pública" className="w-14 h-14 rounded-full border-2 border-primary/40 object-cover shadow-glow" />
-        <a href={str} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline font-mono">
-          Ver foto original ↗
-        </a>
+        <div>
+          <a href={str} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline font-mono block font-semibold">
+            Ver foto original ↗
+          </a>
+          <span className="text-[10px] text-ink-faint">Foto pública identificada no Gravatar / GitHub</span>
+        </div>
       </div>
     );
   }
 
-  // Links clicáveis
+  // Links clicáveis com legendas explicativas completas
   if (str.startsWith('http://') || str.startsWith('https://')) {
     let linkLabel = 'Abrir link oficial ↗';
     let btnClass = 'text-primary border-primary/30 bg-primary/10 hover:bg-primary/20';
+    let explanation = 'Link externo para consulta de registros públicos.';
 
-    if (str.includes('wa.me')) {
+    if (str.includes('conectesus')) {
+      linkLabel = '🏥 ConecteSUS / Ministério da Saúde ↗';
+      btnClass = 'text-cyan-400 border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20';
+      explanation = 'Requer login na conta gov.br para acessar o Cartão Nacional de Saúde (CNS), vacinas e histórico do SUS.';
+    } else if (str.includes('receitafederal')) {
+      linkLabel = '🏛️ Receita Federal (Comprovante CPF) ↗';
+      btnClass = 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20';
+      explanation = 'Consulta pública oficial da Receita Federal para verificar a situação cadastral e emitir o comprovante de inscrição do CPF.';
+    } else if (str.includes('consultanumero.abrtelecom')) {
+      linkLabel = '📞 ABR Telecom (Portabilidade Oficial) ↗';
+      btnClass = 'text-amber border-amber/30 bg-amber/10 hover:bg-amber/20';
+      explanation = 'Base oficial em tempo real da ABR Telecom para checar a operadora atualizada de linhas portadas (Claro, TIM, Vivo).';
+    } else if (str.includes('wa.me')) {
       linkLabel = '💬 Conversar no WhatsApp ↗';
       btnClass = 'text-success border-success/30 bg-success/10 hover:bg-success/20';
+      explanation = 'Inicia conversa direta no WhatsApp ou WhatsApp Web sem precisar adicionar o número à agenda de contatos.';
     } else if (str.includes('t.me')) {
       linkLabel = '✈️ Abrir no Telegram ↗';
       btnClass = 'text-cyan-400 border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20';
-    } else if (str.includes('github.com')) {
-      linkLabel = '🐙 Ver Perfil no GitHub ↗';
-    } else if (str.includes('portaldatransparencia')) {
-      linkLabel = '🏛️ Portal da Transparência ↗';
-    } else if (str.includes('queridodiario')) {
-      linkLabel = '📰 Diários Oficiais dos Municípios ↗';
-    } else if (str.includes('jusbrasil')) {
-      linkLabel = '⚖️ Processos no Jusbrasil ↗';
-    } else if (str.includes('escavador')) {
-      linkLabel = '🔍 Busca no Escavador ↗';
+      explanation = 'Localiza perfil ou canal vinculado a este número de telefone no aplicativo Telegram.';
     } else if (str.includes('truecaller')) {
       linkLabel = '📞 Consultar no Truecaller ↗';
+      btnClass = 'text-blue-400 border-blue-400/30 bg-blue-400/10 hover:bg-blue-400/20';
+      explanation = 'Identificador comunitário de chamadas para verificar o nome informado por outros usuários e a operadora recente.';
     } else if (str.includes('sync.me')) {
       linkLabel = '🔍 Consultar no Sync.me ↗';
-    } else if (str.includes('conectesus')) {
-      linkLabel = '🏥 ConecteSUS / Ministério da Saúde ↗';
+      btnClass = 'text-indigo-400 border-indigo-400/30 bg-indigo-400/10 hover:bg-indigo-400/20';
+      explanation = 'Identificador de chamadas colaborativo e busca de redes sociais associadas ao número.';
+    } else if (str.includes('github.com')) {
+      linkLabel = '🐙 Perfil no GitHub ↗';
+      btnClass = 'text-primary border-primary/30 bg-primary/10 hover:bg-primary/20';
+      explanation = 'Perfil público de desenvolvedor com foto, biografia, empresa e repositórios abertos.';
+    } else if (str.includes('portaldatransparencia')) {
+      linkLabel = '🏛️ Portal da Transparência ↗';
       btnClass = 'text-cyan-400 border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20';
+      explanation = 'Base do Governo Federal para consulta de servidores públicos, Pessoas Expostas Politicamente (PEP) e benefícios.';
+    } else if (str.includes('queridodiario')) {
+      linkLabel = '📰 Diários Oficiais dos Municípios ↗';
+      btnClass = 'text-purple-400 border-purple-400/30 bg-purple-400/10 hover:bg-purple-400/20';
+      explanation = 'Pesquisa em publicações e Diários Oficiais municipais abertos pelo Open Knowledge Brasil.';
+    } else if (str.includes('jusbrasil')) {
+      linkLabel = '⚖️ Processos no Jusbrasil ↗';
+      btnClass = 'text-amber border-amber/30 bg-amber/10 hover:bg-amber/20';
+      explanation = 'Busca pública de processos judiciais e menções em diários de justiça de todo o país.';
+    } else if (str.includes('escavador')) {
+      linkLabel = '🔍 Busca no Escavador ↗';
+      btnClass = 'text-indigo-400 border-indigo-400/30 bg-indigo-400/10 hover:bg-indigo-400/20';
+      explanation = 'Busca de pessoas e publicações em diários oficiais e judiciais do Brasil.';
     } else if (str.includes('discord')) {
       linkLabel = '👾 Comunidade / Usuário no Discord ↗';
       btnClass = 'text-indigo-400 border-indigo-400/30 bg-indigo-400/10 hover:bg-indigo-400/20';
+      explanation = 'Localizador de servidores e contas de usuários na plataforma Discord.';
     } else if (str.includes('linkedin')) {
       linkLabel = '💼 Buscar no LinkedIn ↗';
       btnClass = 'text-blue-400 border-blue-400/30 bg-blue-400/10 hover:bg-blue-400/20';
+      explanation = 'Busca de histórico profissional e perfis corporativos no LinkedIn.';
     }
 
     return (
-      <a
-        href={str}
-        target="_blank"
-        rel="noreferrer"
-        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${btnClass}`}
-      >
-        {linkLabel}
-      </a>
+      <div className="space-y-1.5 pt-1">
+        <a
+          href={str}
+          target="_blank"
+          rel="noreferrer"
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${btnClass}`}
+        >
+          {linkLabel}
+        </a>
+        <p className="text-[11px] text-ink-dim leading-snug flex items-start gap-1.5 pl-0.5">
+          <span className="opacity-70 shrink-0 mt-0.5">ℹ️</span>
+          <span>{explanation}</span>
+        </p>
+      </div>
     );
   }
 
@@ -423,7 +455,8 @@ function ResultsPanel({ results }) {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col min-h-0 flex-1">
+      {/* Header Fixo dos Resultados */}
       <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between flex-wrap gap-2 shrink-0 bg-surface/40">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-success shadow-glow animate-pulse" />
@@ -444,22 +477,23 @@ function ResultsPanel({ results }) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 sm:p-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Grid com Rolagem Perfeita e Suave */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-5 pr-2 max-h-[calc(75vh-50px)]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pb-4">
           {fields.map((f, i) => {
-            const isWide = String(f.value).length > 40 || String(f.value).startsWith('http');
+            const isWide = String(f.value).length > 35 || String(f.value).startsWith('http');
             return (
               <div
                 key={i}
-                className={`p-3.5 rounded-xl border border-white/10 bg-surface/50 hover:border-primary/30 transition-all ${
+                className={`p-4 rounded-xl border border-white/10 bg-surface/60 hover:border-primary/40 transition-all shadow-sm ${
                   isWide ? 'sm:col-span-2' : ''
                 }`}
               >
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <span className="text-[11px] font-mono uppercase text-ink-dim font-medium">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-[11px] font-mono uppercase text-ink-dim font-semibold tracking-wide">
                     {formatLabel(f.key)}
                   </span>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-wrap">
                     {(f.sources || []).map((src) => (
                       <span
                         key={src}
@@ -472,7 +506,7 @@ function ResultsPanel({ results }) {
                     ))}
                   </div>
                 </div>
-                <div className="text-sm text-ink font-medium break-words">
+                <div className="text-sm text-ink font-medium break-words leading-relaxed">
                   {renderValue(f.value)}
                 </div>
               </div>
@@ -1065,8 +1099,9 @@ function App() {
         {/* Topbar Greeting & Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 relative">
           <div ref={greetingRef} className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary font-bold text-lg shadow-glow">
-              {getInitial(userName)}
+            {/* Ícone de Escudo de Segurança Premium */}
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary shadow-glow shrink-0">
+              <IconShield className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1470,18 +1505,18 @@ function App() {
           </aside>
 
           <section className="results-stage dashboard-stagger" aria-live="polite">
-            <div className="results-stage-frame glass-panel rounded-2xl overflow-hidden relative min-h-[300px] max-h-[460px]">
+            <div className="results-stage-frame glass-panel rounded-2xl relative min-h-[340px] max-h-[75vh] flex flex-col overflow-hidden">
               <div className="results-stage-ambient" aria-hidden />
 
               {isSearching && (
-                <div className="relative z-10 flex flex-col items-center justify-center gap-5 min-h-[300px] px-6 py-10">
+                <div className="relative z-10 flex flex-col items-center justify-center gap-5 min-h-[340px] px-6 py-10">
                   <div className="search-pulse-ring" />
                   <p className="text-sm text-ink-dim font-mono animate-pulse">Consultando fontes de inteligência…</p>
                 </div>
               )}
 
               {searchError && !isSearching && (
-                <div className="relative z-10 flex flex-col items-center justify-center min-h-[300px] px-8 py-10">
+                <div className="relative z-10 flex flex-col items-center justify-center min-h-[340px] px-8 py-10">
                   <div className="error-banner flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger-soft/80 backdrop-blur-sm px-5 py-4 text-sm text-danger max-w-md w-full">
                     <IconAlert className="w-5 h-5 mt-0.5 shrink-0" />
                     <div>
@@ -1493,13 +1528,13 @@ function App() {
               )}
 
               {results && !isSearching && !searchError && (
-                <div className="relative z-10 h-full max-h-[460px] p-1 sm:p-1.5">
+                <div className="relative z-10 h-full flex-1 flex flex-col min-h-0">
                   <ResultsPanel results={results} />
                 </div>
               )}
 
               {!results && !searchError && !isSearching && (
-                <div className="relative z-10 h-full">
+                <div className="relative z-10 h-full flex items-center justify-center">
                   <ResultsStagePlaceholder />
                 </div>
               )}
