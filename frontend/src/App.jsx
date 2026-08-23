@@ -642,7 +642,7 @@ function App() {
     setIsPinging(true);
     const start = performance.now();
     try {
-      await axios.get(`${API}/health`, { timeout: 15000 });
+      await axios.get(`${API}/health?_t=${Date.now()}`, { timeout: 20000 });
       const ping = Math.round(performance.now() - start);
       setServerPing(ping);
       if (ping > 1500) {
@@ -661,16 +661,17 @@ function App() {
   useEffect(() => {
     if (!isLogged) return;
     axios
-      .get(`${API}/apis`, { timeout: 30000 })
+      .get(`${API}/apis?_t=${Date.now()}`, { timeout: 30000 })
       .then((response) => {
         if (Array.isArray(response.data?.apis) && response.data.apis.length) {
           setCatalogApis(response.data.apis);
         }
+        setSystemOnline(true);
       })
       .catch(() => {});
 
     checkHealth();
-    const interval = setInterval(checkHealth, 20000);
+    const interval = setInterval(checkHealth, 15000);
     return () => clearInterval(interval);
   }, [isLogged, checkHealth]);
 
@@ -813,10 +814,14 @@ function App() {
     setSearchError('');
     setResults(null);
     setIsSearching(true);
+    const searchStart = performance.now();
     try {
       const response = await axios.get(`${API}/search`, {
         params: { q: searchQuery.trim(), user_id: userId },
       });
+      const searchLatency = Math.round(performance.now() - searchStart);
+      setServerPing(searchLatency);
+      setSystemOnline(true);
       setResults(response.data);
       axios
         .post(`${API}/log`, {
