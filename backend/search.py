@@ -611,6 +611,13 @@ def fetch_name_intel(query: dict) -> list:
     # 5. Escavador (Diários Oficiais & Pessoas)
     data["escavador_diarios"] = f"https://www.escavador.com/busca?q={encoded_query}"
 
+    # 6. ConecteSUS / Ministério da Saúde (Cartão Nacional de Saúde)
+    data["conectesus_ministerio_saude"] = "https://conectesus-paciente.saude.gov.br/"
+
+    # 7. Redes Profissionais e Comunidades
+    data["linkedin_busca"] = f"https://www.linkedin.com/search/results/all/?keywords={encoded_query}"
+    data["discord_comunidade"] = f"https://discord.com/search?q={encoded_query}"
+
     return [{"source": "nameint", "target": "nome_intel", "data": data}]
 
 
@@ -816,6 +823,9 @@ def fetch_cpf_intel(query: dict) -> list:
 
     # Link oficial da Receita Federal
     data["receita_federal_comprovante"] = "https://servicos.receitafederal.fazenda.gov.br/servicos/cpf/consultasituacao/consultapublica.asp"
+
+    # ConecteSUS / Ministério da Saúde
+    data["conectesus_ministerio_saude"] = "https://conectesus-paciente.saude.gov.br/"
 
     return [{"source": "cpfint", "target": "cpf_intel", "data": data}]
 

@@ -395,16 +395,40 @@ async def admin_update_apis(user_id: str, request: Request, authorization: Optio
         {"enabled_apis": cleaned, "admin": admin.get("email")},
         request,
     )
-    return JSONResponse({"status": "updated", "user": user_id, "enabled_apis": cleaned})
+@app.delete("/admin/accounts/{user_id}")
+async def admin_delete_account(user_id: str, request: Request, authorization: Optional[str] = Header(None)):
+    admin = _verify_admin_token(authorization)
+    db.delete_user(user_id)
+    write_activity(
+        admin.get("user_id", "admin"),
+        f"admin excluiu conta {user_id}",
+        {"target_user": user_id, "admin": admin.get("email")},
+        request,
+    )
+    return JSONResponse({"status": "deleted", "user": user_id})
+
+
+# ── User History ───────────────────────────────────────────────────────────
+
+@app.get("/user/{user_id}/history")
+async def get_user_search_history(user_id: str):
+    items = db.get_user_history(user_id, limit=50)
+    # Filtra apenas buscas
+    searches = [
+        item for item in items
+        if item.get("action", "").startswith("busca por ") or "query" in item
+    ]
+    return JSONResponse({"history": searches[:30]})
 
 
 # ── Tickets ────────────────────────────────────────────────────────────────
 
 @app.post("/tickets")
-async def create_ticket(request: Request):
+async def create_ticket_endpoint(request: Request):
     data = await request.json()
     user_id = data.get("user_id")
     user_email = data.get("user_email", "")
+    user_name = data.get("user_name") or get_user_display_name(user_id, user_email)
     category = data.get("category", "bug")
     message = (data.get("message") or "").strip()
     if not user_id or not message:
@@ -413,9 +437,32 @@ async def create_ticket(request: Request):
         category = "outro"
     if len(message) > 2000:
         raise HTTPException(status_code=400, detail="Mensagem muito longa (máx. 2000 caracteres)")
-    result = db.create_ticket(user_id, user_email, category, message)
+    result = db.create_ticket(user_id, user_email, category, message, user_name=user_name)
     write_activity(user_id, f"ticket criado: {category}", {"ticket_id": result["id"]}, request)
     return JSONResponse({"status": "created", **result})
+
+
+@app.get("/user/{user_id}/tickets")
+async def get_user_tickets_endpoint(user_id: str):
+    tickets = db.get_user_tickets(user_id)
+    return JSONResponse({"tickets": tickets})
+
+
+@app.post("/tickets/{ticket_id}/reply")
+async def user_reply_ticket(ticket_id: int, request: Request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    sender_name = data.get("sender_name") or "Usuário"
+    message = (data.get("message") or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Mensagem não pode estar vazia")
+    
+    updated = db.reply_ticket(ticket_id, sender_type="user", sender_name=sender_name, message=message, new_status="aberto")
+    if not updated:
+        raise HTTPException(status_code=404, detail="Ticket não encontrado")
+    if user_id:
+        write_activity(user_id, f"respondeu ticket #{ticket_id}", {"ticket_id": ticket_id}, request)
+    return JSONResponse({"status": "replied", "ticket": updated})
 
 
 @app.get("/admin/tickets")
@@ -424,23 +471,50 @@ async def admin_tickets(
     status: Optional[str] = Query(None),
 ):
     _verify_admin_token(authorization)
-    status_filter = status if status in ("aberto", "resolvido") else None
+    status_filter = status if status in ("aberto", "respondido", "finalizado") else None
     tickets = db.list_tickets(status_filter)
     open_count = db.count_open_tickets()
     return JSONResponse({"tickets": tickets, "open_count": open_count})
 
 
-@app.patch("/admin/tickets/{ticket_id}")
-async def admin_resolve_ticket(ticket_id: int, request: Request, authorization: Optional[str] = Header(None)):
+@app.patch("/admin/tickets/{ticket_id}/status")
+async def admin_update_ticket_status(ticket_id: int, request: Request, authorization: Optional[str] = Header(None)):
     admin = _verify_admin_token(authorization)
-    result = db.resolve_ticket(ticket_id)
+    data = await request.json()
+    new_status = data.get("status")
+    if new_status not in ("aberto", "respondido", "finalizado"):
+        raise HTTPException(status_code=400, detail="Status inválido. Use 'aberto', 'respondido' ou 'finalizado'.")
+    updated = db.update_ticket_status(ticket_id, new_status)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Ticket não encontrado")
     write_activity(
         admin.get("user_id", "admin"),
-        f"ticket #{ticket_id} resolvido",
+        f"alterou status do ticket #{ticket_id} para {new_status}",
+        {"ticket_id": ticket_id, "status": new_status, "admin": admin.get("email")},
+        request,
+    )
+    return JSONResponse({"status": "updated", "ticket": updated})
+
+
+@app.post("/admin/tickets/{ticket_id}/reply")
+async def admin_reply_ticket(ticket_id: int, request: Request, authorization: Optional[str] = Header(None)):
+    admin = _verify_admin_token(authorization)
+    data = await request.json()
+    message = (data.get("message") or "").strip()
+    new_status = data.get("status") or "respondido"
+    if not message:
+        raise HTTPException(status_code=400, detail="Mensagem não pode estar vazia")
+    sender_name = data.get("sender_name") or admin.get("email", "Administrador")
+    updated = db.reply_ticket(ticket_id, sender_type="admin", sender_name=sender_name, message=message, new_status=new_status)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Ticket não encontrado")
+    write_activity(
+        admin.get("user_id", "admin"),
+        f"admin respondeu ticket #{ticket_id}",
         {"ticket_id": ticket_id, "admin": admin.get("email")},
         request,
     )
-    return JSONResponse(result)
+    return JSONResponse({"status": "replied", "ticket": updated})
 
 
 if __name__ == "__main__":

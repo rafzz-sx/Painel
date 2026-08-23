@@ -9,6 +9,8 @@
 html, body {
   background: #070B12;
   color: #E8EEF7;
+  min-height: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 
 body {
@@ -1085,6 +1087,54 @@ html, body, #root {
 
 .ping-badge--offline {
   box-shadow: 0 0 12px rgba(255, 99, 107, 0.15);
+}
+
+/* ---------- Ticket Success Glow Animation ---------- */
+
+.ticket-success-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 1.5rem 1rem;
+}
+
+.ticket-success-ring {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(62, 207, 142, 0.15);
+  border: 2px solid #3ECF8E;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3ECF8E;
+  font-size: 28px;
+  box-shadow: 0 0 35px rgba(62, 207, 142, 0.4), inset 0 0 15px rgba(62, 207, 142, 0.2);
+  animation: ticketPulse 2s infinite ease-in-out;
+}
+
+@keyframes ticketPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 25px rgba(62, 207, 142, 0.35), inset 0 0 12px rgba(62, 207, 142, 0.2);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 0 45px rgba(62, 207, 142, 0.6), inset 0 0 20px rgba(62, 207, 142, 0.35);
+  }
+}
+
+/* ---------- History Card Glow ---------- */
+
+.history-item-card {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.history-item-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(58, 167, 255, 0.35);
+  box-shadow: 0 4px 25px rgba(58, 167, 255, 0.12);
 }
 
 /* ---------- Mobile refinements ---------- */
