@@ -244,11 +244,13 @@ def is_valid_cpf(digits: str) -> bool:
 
 
 def _looks_like_cpf_format(text: str) -> bool:
-    return bool(re.fullmatch(r"\d{3}[.\s]?\d{3}[.\s]?\d{3}[-./\s]?\d{2}", text.strip()))
+    t = text.strip()
+    return bool(re.fullmatch(r"\d{3}\.\d{3}\.\d{3}-\d{2}", t)) or bool(re.search(r"\d{3}\.\d{3}\.\d{3}", t))
 
 
 def _looks_like_phone_format(text: str) -> bool:
-    return bool(re.search(r"[(\+]", text)) or bool(re.fullmatch(r"\d{2}\s?\d{4,5}[-\s]?\d{4}", text.strip()))
+    t = text.strip()
+    return bool(re.search(r"[(\+]", t)) or bool(re.fullmatch(r"\d{2}\s\d{4,5}[-\s]\d{4}", t)) or bool(re.search(r"-\d{4}$", t))
 
 
 def _looks_like_plate(text: str) -> bool:
@@ -299,14 +301,14 @@ def classify_query(raw: str) -> dict:
 
     # CPF vs Telefone (11 dígitos)
     if len(digits) == 11 and not kinds:
-        cpf_format = _looks_like_cpf_format(text)
-        phone_format = _looks_like_phone_format(text)
+        cpf_punct = _looks_like_cpf_format(text)
+        phone_punct = _looks_like_phone_format(text)
         cpf_valid = is_valid_cpf(digits)
         valid_ddd = digits[:2] in DDD_STATE and digits[2] == "9"
 
-        if cpf_format:
+        if cpf_punct:
             kinds.append("cpf")
-        elif phone_format and valid_ddd and not cpf_valid:
+        elif phone_punct and valid_ddd:
             kinds.append("phone")
         elif cpf_valid:
             kinds.append("cpf")
