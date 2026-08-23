@@ -1,6 +1,6 @@
 {
   "appId": "com.paineldados.app",
-  "appName": "Painel de Dados",
+  "appName": "Painel",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"
