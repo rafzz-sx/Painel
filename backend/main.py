@@ -59,10 +59,15 @@ def write_activity(user_id: str, action: str, extra: Optional[dict] = None, requ
 
 
 def user_enabled_apis(uid: str) -> list:
+    allowed = {api["id"] for api in AVAILABLE_APIS}
     user = db.get_user(uid)
     if user and isinstance(user.get("enabled_apis"), list) and user["enabled_apis"]:
-        allowed = {api["id"] for api in AVAILABLE_APIS}
-        return [src for src in user["enabled_apis"] if src in allowed]
+        current = set(user["enabled_apis"])
+        merged = [src for src in user["enabled_apis"] if src in allowed]
+        for src in DEFAULT_SOURCES:
+            if src not in current and src in allowed:
+                merged.append(src)
+        return merged
     return DEFAULT_SOURCES[:]
 
 
@@ -289,13 +294,9 @@ async def search_data(
 ):
     enabled = user_enabled_apis(user_id)
     if not enabled:
-        raise HTTPException(status_code=403, detail="Nenhuma API está ativa para esta conta. Peça ao administrador.")
+        enabled = DEFAULT_SOURCES[:]
     result = run_search(q, enabled)
     write_activity(user_id, f"busca por {q}", {"query": q, "sources": enabled}, request)
-    if not result["fields"]:
-        messages = [err.get("detail") for err in result["errors"] if err.get("detail")]
-        detail = messages[0] if messages else "Nenhuma API retornou dados para essa informação."
-        raise HTTPException(status_code=404, detail=detail)
     return JSONResponse(result)
 
 
