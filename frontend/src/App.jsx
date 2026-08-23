@@ -6,8 +6,8 @@ import HelpModal from './HelpModal';
 import AdminDashboard from './AdminDashboard';
 import './styles/index.css';
 
-const APP_VERSION = 'v3.2.0';
-const APP_BUILD_TIME = '23/08 às 19:30';
+const APP_VERSION = 'v3.3.0';
+const APP_BUILD_TIME = '23/08 às 20:50';
 const SESSION_KEY = 'painel_auth_session';
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 horas de sessão contínua
 
