@@ -548,6 +548,8 @@ function App() {
   const [authToken, setAuthToken] = useState('');
   const [showAdmin, setShowAdmin] = useState(false);
   const [systemOnline, setSystemOnline] = useState(null);
+  const [serverPing, setServerPing] = useState(null);
+  const [isPinging, setIsPinging] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [ticketCategory, setTicketCategory] = useState('bug');
   const [ticketMessage, setTicketMessage] = useState('');
@@ -599,11 +601,22 @@ function App() {
   }, [isLogged, isTransitioning, animateDashboardEntry]);
 
   const checkHealth = useCallback(async () => {
+    setIsPinging(true);
+    const start = performance.now();
     try {
-      await axios.get(`${API}/health`, { timeout: 30000 });
-      setSystemOnline(true);
+      await axios.get(`${API}/health`, { timeout: 15000 });
+      const ping = Math.round(performance.now() - start);
+      setServerPing(ping);
+      if (ping > 1500) {
+        setSystemOnline('slow');
+      } else {
+        setSystemOnline(true);
+      }
     } catch {
+      setServerPing(null);
       setSystemOnline(false);
+    } finally {
+      setIsPinging(false);
     }
   }, []);
 
@@ -619,7 +632,7 @@ function App() {
       .catch(() => {});
 
     checkHealth();
-    const interval = setInterval(checkHealth, 30000);
+    const interval = setInterval(checkHealth, 20000);
     return () => clearInterval(interval);
   }, [isLogged, checkHealth]);
 
@@ -871,7 +884,7 @@ function App() {
                     <IconUser className="w-[18px] h-[18px] text-ink-dim shrink-0" />
                     <input
                       type="text"
-                      placeholder="Seu nome (ex: Rafael, Davi…)"
+                      placeholder="Seu nome (ex: Rafael, João…)"
                       autoComplete="name"
                       className="w-full bg-transparent text-ink placeholder:text-ink-faint text-sm outline-none"
                       value={displayName}
@@ -918,7 +931,7 @@ function App() {
 
                 {authMode === 'register' && (
                   <p className="text-[11px] text-ink-faint px-1">
-                    O nome escolhido aparecerá como saudação no painel — ex: &quot;Olá, Davi&quot;.
+                    O nome escolhido aparecerá como saudação no painel — ex: &quot;Olá, João&quot;.
                   </p>
                 )}
 
@@ -949,10 +962,6 @@ function App() {
               </form>
             </div>
           </div>
-
-          <p className="text-center text-[11px] text-ink-faint font-mono mt-5 tracking-wide break-all px-2">
-            api · {API}
-          </p>
         </div>
       </div>
     );
@@ -1000,24 +1009,55 @@ function App() {
                 </span>
               </h1>
               {systemOnline === true && (
-                <p className="text-sm sm:text-base text-ink-dim mt-2 max-w-xl flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-success animate-blink shrink-0" />
-                  Sistema online e pronto para uso.
-                </p>
+                <div className="mt-2 max-w-xl flex items-center gap-2.5 flex-wrap">
+                  <p className="text-sm sm:text-base text-ink-dim flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-success animate-blink shrink-0" />
+                    Sistema online e pronto para uso.
+                  </p>
+                  {serverPing !== null && (
+                    <span className="ping-badge ping-badge--fast inline-flex items-center gap-1 text-[11px] font-mono font-medium px-2 py-0.5 rounded-md border border-success/30 bg-success/10 text-success">
+                      ⚡ {serverPing}ms
+                    </span>
+                  )}
+                </div>
+              )}
+              {systemOnline === 'slow' && (
+                <div className="mt-2 max-w-xl">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <p className="text-sm sm:text-base text-amber flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber animate-blink shrink-0" />
+                      Conexão lenta/fraca com o servidor.
+                    </p>
+                    {serverPing !== null && (
+                      <span className="ping-badge ping-badge--slow inline-flex items-center gap-1 text-[11px] font-mono font-medium px-2 py-0.5 rounded-md border border-amber/30 bg-amber/10 text-amber">
+                        ⚡ {serverPing >= 1000 ? (serverPing / 1000).toFixed(1) + 's' : serverPing + 'ms'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-ink-faint mt-1">
+                    O servidor está respondendo, mas as consultas podem levar alguns segundos a mais.
+                  </p>
+                </div>
               )}
               {systemOnline === false && (
                 <div className="mt-2 max-w-xl">
-                  <p className="text-sm text-danger flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-danger shrink-0" />
-                    O sistema demorou para responder.
-                  </p>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <p className="text-sm text-danger flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-danger shrink-0" />
+                      Sem conexão com o servidor.
+                    </p>
+                    <span className="ping-badge ping-badge--offline inline-flex items-center gap-1 text-[11px] font-mono font-medium px-2 py-0.5 rounded-md border border-danger/30 bg-danger/10 text-danger">
+                      ✕ Offline
+                    </span>
+                  </div>
                   <div className="flex items-center gap-3 mt-1.5">
                     <button
                       type="button"
                       onClick={checkHealth}
-                      className="text-xs text-primary hover:text-ink underline underline-offset-2 font-medium"
+                      disabled={isPinging}
+                      className="text-xs text-primary hover:text-ink underline underline-offset-2 font-medium flex items-center gap-1"
                     >
-                      🔄 Tentar reconectar
+                      {isPinging ? <span className="spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} /> : '🔄'} Tentar reconectar
                     </button>
                     <span className="text-ink-faint text-xs">·</span>
                     <button
@@ -1033,7 +1073,7 @@ function App() {
               {systemOnline === null && (
                 <p className="text-sm text-ink-dim mt-2 max-w-xl flex items-center gap-2">
                   <span className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} />
-                  Verificando sistema…
+                  Verificando conexão com o servidor…
                 </p>
               )}
               <div className="flex items-center gap-1.5 text-xs text-ink-dim mt-2">
@@ -1128,7 +1168,7 @@ function App() {
                         <IconUser className="w-[18px] h-[18px] text-ink-dim shrink-0" />
                         <input
                           type="text"
-                          placeholder="Ex: Rafael, Davi, Gabriel…"
+                          placeholder="Ex: Rafael, João, Gabriel…"
                           className="w-full bg-transparent text-ink placeholder:text-ink-faint text-sm outline-none"
                           value={settingsName}
                           onChange={(e) => setSettingsName(e.target.value)}

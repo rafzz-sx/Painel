@@ -1067,6 +1067,26 @@ html, body, #root {
   overflow: hidden;
 }
 
+/* ---------- Ping Badge ---------- */
+
+.ping-badge {
+  letter-spacing: 0.02em;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(8px);
+}
+
+.ping-badge--fast {
+  box-shadow: 0 0 12px rgba(62, 207, 142, 0.15);
+}
+
+.ping-badge--slow {
+  box-shadow: 0 0 12px rgba(255, 182, 72, 0.15);
+}
+
+.ping-badge--offline {
+  box-shadow: 0 0 12px rgba(255, 99, 107, 0.15);
+}
+
 /* ---------- Mobile refinements ---------- */
 
 @media (max-width: 480px) {
