@@ -95,17 +95,28 @@ export default function AdminDashboard({ token, onBack, catalogApis }) {
     const next = current.includes(apiId)
       ? current.filter((id) => id !== apiId)
       : [...current, apiId];
+
+    // Atualização imediata na interface
+    const optimistic = { ...selected, enabled_apis: next };
+    setSelected(optimistic);
+    setAccounts((list) => list.map((item) => (item.user === optimistic.user ? optimistic : item)));
+
     setSaving(true);
+    setError('');
     try {
       const response = await axios.patch(
         `${API}/admin/accounts/${selected.user}/apis`,
         { enabled_apis: next },
         { headers: authHeaders(token) },
       );
-      const updated = { ...selected, enabled_apis: response.data.enabled_apis };
+      const serverApis = response.data?.enabled_apis || next;
+      const updated = { ...selected, enabled_apis: serverApis };
       setSelected(updated);
       setAccounts((list) => list.map((item) => (item.user === updated.user ? updated : item)));
     } catch (err) {
+      const reverted = { ...selected, enabled_apis: current };
+      setSelected(reverted);
+      setAccounts((list) => list.map((item) => (item.user === reverted.user ? reverted : item)));
       setError(err.response?.data?.detail || 'Falha ao atualizar APIs.');
     } finally {
       setSaving(false);

@@ -389,6 +389,9 @@ async def admin_update_apis(user_id: str, request: Request, authorization: Optio
         {"enabled_apis": cleaned, "admin": admin.get("email")},
         request,
     )
+    return JSONResponse({"status": "ok", "user": user_id, "enabled_apis": cleaned})
+
+
 @app.delete("/admin/accounts/{user_id}")
 async def admin_delete_account(user_id: str, request: Request, authorization: Optional[str] = Header(None)):
     admin = _verify_admin_token(authorization)

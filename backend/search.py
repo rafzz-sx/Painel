@@ -302,15 +302,18 @@ def classify_query(raw: str) -> dict:
         cpf_format = _looks_like_cpf_format(text)
         phone_format = _looks_like_phone_format(text)
         cpf_valid = is_valid_cpf(digits)
+        valid_ddd = digits[:2] in DDD_STATE and digits[2] == "9"
 
-        if cpf_format and cpf_valid:
+        if cpf_format:
             kinds.append("cpf")
-        elif phone_format:
+        elif phone_format and valid_ddd and not cpf_valid:
             kinds.append("phone")
         elif cpf_valid:
             kinds.append("cpf")
-        else:
+        elif valid_ddd:
             kinds.append("phone")
+        else:
+            kinds.append("cpf")
 
     # CNPJ (14 dígitos)
     if len(digits) == 14 and not kinds:
@@ -832,8 +835,23 @@ def fetch_cpf_intel(query: dict) -> list:
     else:
         data["validacao_oficial"] = "❌ CPF Inválido (Dígitos verificadores não conferem)"
 
+    # Faixa estimada de inscrição na Receita Federal
+    primeiro = int(digits[0]) if digits[0].isdigit() else 0
+    if primeiro == 0:
+        data["faixa_cadastro_receita"] = "Inscrição antiga/consolidada da base da Receita Federal"
+    elif primeiro in (1, 2, 3, 4):
+        data["faixa_cadastro_receita"] = "Inscrição intermediária na base da Receita Federal"
+    else:
+        data["faixa_cadastro_receita"] = "Inscrição recente na base da Receita Federal"
+
+    # Busca nominal em Diários Oficiais e Concursos Públicos
+    data["busca_nome_diarios_e_concursos"] = f"https://www.in.gov.br/consulta/-/buscar/dou?q={digits}"
+    data["busca_nome_e_processos_jusbrasil"] = f"https://www.jusbrasil.com.br/busca?q={digits}"
+    data["portal_transparencia_servidores"] = f"https://portaldatransparencia.gov.br/busca?termo={digits}"
+
     # Link oficial da Receita Federal
     data["receita_federal_comprovante"] = "https://servicos.receitafederal.fazenda.gov.br/servicos/cpf/consultasituacao/consultapublica.asp"
+    data["aviso_sigilo_nominal"] = "A Receita Federal exige consulta com data de nascimento no portal oficial para emissão do comprovante nominal autenticado."
 
     # ConecteSUS / Ministério da Saúde
     data["conectesus_ministerio_saude"] = "https://conectesus-paciente.saude.gov.br/"
@@ -859,26 +877,24 @@ def fetch_plate_intel(query: dict) -> list:
     is_old = bool(re.fullmatch(r"[A-Z]{3}\d{4}", text))
 
     if is_mercosul:
-        data["formato"] = "Mercosul (AAA0A00)"
+        data["padrao"] = "Mercosul (Novo)"
         data["placa_formatada"] = f"{text[:3]}{text[3]}{text[4]}{text[5:]}"
-        letter_pos = text[4]
-        digit_equiv = str(ord(letter_pos) - ord("A"))
-        old_equiv = text[:4] + digit_equiv + text[5:]
-        data["equivalente_antigo"] = f"{old_equiv[:3]}-{old_equiv[3:]}"
     elif is_old:
-        data["formato"] = "Padrão Antigo (AAA-0000)"
+        data["padrao"] = "Cinza / Antigo (Três Letras + 4 Dígitos)"
         data["placa_formatada"] = f"{text[:3]}-{text[3:]}"
     else:
-        data["formato"] = "Formato não reconhecido"
-        return [{"source": "plateint", "target": "placa", "data": data}]
+        return []
 
     letters = text[:3]
     state_code = _plate_to_state(letters)
+    state_name = STATE_NAMES.get(state_code, "")
     if state_code:
-        state_name = STATE_NAMES.get(state_code, state_code)
-        data["estado_de_registro"] = f"{state_name} ({state_code})"
+        data["estado_registro_denatran"] = f"{state_name} ({state_code})"
     else:
-        data["estado_de_registro"] = "Não identificado nas faixas Denatran"
+        data["estado_registro_denatran"] = "Não identificado na faixa histórica"
+
+    data["consulta_senatran"] = "https://portalservicos.senatran.serpro.gov.br/#/veiculos"
+    data["consulta_sinesp"] = "https://sinesp.gov.br/"
 
     return [{"source": "plateint", "target": "placa", "data": data}]
 
@@ -971,28 +987,31 @@ def fetch_cross_intelligence(query: dict) -> list:
     raw = query["raw"].strip()
     data = {}
 
-    # 1. Cruzamento Bancário & Chaves PIX
-    if "phone" in kinds or "ddd" in kinds or len(digits) in (10, 11):
-        if len(digits) == 11:
+    # 1. Se for CPF (NÃO trata como telefone!)
+    if "cpf" in kinds and len(digits) == 11:
+        data["chave_pix_cpf"] = f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
+        data["consulta_bancos_registrato"] = "https://registrato.bcb.gov.br/registrato/"
+        data["aviso_registrato_bacen"] = "Extrato oficial do Banco Central de todas as contas e chaves PIX abertas no CPF (CCS/SCR)"
+        data["busca_nome_em_diarios_e_processos"] = f"https://www.jusbrasil.com.br/busca?q={digits}"
+        data["portal_transparencia_federal"] = f"https://portaldatransparencia.gov.br/busca?termo={digits}"
+
+    # 2. Se for Telefone (Apenas se NÃO for CPF!)
+    elif "phone" in kinds and "cpf" not in kinds:
+        if len(digits) in (10, 11):
             data["chave_pix_telefone"] = f"+55{digits}"
             data["formato_bancario_spi"] = f"55{digits}"
-    if "cpf" in kinds and len(digits) == 11:
-        data["chave_pix_cpf"] = digits
-        data["consulta_bancos_registrato"] = "https://registrato.bcb.gov.br/registrato/"
-        data["aviso_registrato_bacen"] = "Extrato oficial do Banco Central de todas as contas abertas no CPF (CCS/SCR)"
+
+    # 3. Se for E-mail
     if "email" in kinds:
         data["chave_pix_email"] = raw.lower()
+        data["verificador_vazamentos_pwned"] = f"https://haveibeenpwned.com/account/{urllib.parse.quote(raw)}"
+        data["aviso_seguranca_digital"] = "Verifica se este e-mail constou em vazamentos de dados conhecidos"
 
-    # 2. Investigação de Sociedades e Empresas (QSA Reverso)
+    # 4. Investigação de Sociedades e Empresas (QSA Reverso por Nome)
     if "name" in kinds:
         encoded_name = urllib.parse.quote_plus(raw)
         data["consulta_socios_receita_federal"] = f"https://portaldatransparencia.gov.br/busca?termo={encoded_name}"
         data["busca_empresas_como_socio"] = f"https://www.jusbrasil.com.br/busca?q={encoded_name}+socio"
-
-    # 3. Verificação de Vazamentos Públicos (OSINT & Breach Check)
-    if "email" in kinds:
-        data["verificador_vazamentos_pwned"] = f"https://haveibeenpwned.com/account/{urllib.parse.quote(raw)}"
-        data["aviso_seguranca_digital"] = "Verifica se este e-mail constou em vazamentos de dados conhecidos"
 
     if not data:
         return []

@@ -337,6 +337,10 @@ function renderValue(value) {
       linkLabel = '🏛️ Portal da Transparência ↗';
       btnClass = 'text-cyan-400 border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20';
       explanation = 'Base do Governo Federal para consulta de servidores públicos, Pessoas Expostas Politicamente (PEP) e benefícios.';
+    } else if (str.includes('in.gov.br')) {
+      linkLabel = '📰 Diário Oficial da União (DOU) ↗';
+      btnClass = 'text-purple-400 border-purple-400/30 bg-purple-400/10 hover:bg-purple-400/20';
+      explanation = 'Consulta de publicações de concursos públicos, nomeações, licitações e atos oficiais da União.';
     } else if (str.includes('queridodiario')) {
       linkLabel = '📰 Diários Oficiais dos Municípios ↗';
       btnClass = 'text-purple-400 border-purple-400/30 bg-purple-400/10 hover:bg-purple-400/20';
