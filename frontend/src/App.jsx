@@ -69,6 +69,7 @@ const DEFAULT_APIS = [
   { id: 'cpfint', name: 'CPF Intel', supports: ['Validação', 'Região Fiscal', 'Receita Federal', 'ConecteSUS'] },
   { id: 'plateint', name: 'Placa Intel', supports: ['Mercosul', 'Denatran UF'] },
   { id: 'ipdomainint', name: 'IP/Domínio Intel', supports: ['Geolocalização', 'Registro.br RDAP', 'ISP'] },
+  { id: 'crossintel', name: 'Dossiê Cruzado (Bancos, Sócios & Vazamentos)', supports: ['Bancos', 'PIX', 'Sócios', 'Vazamentos', 'Registrato'] },
 ];
 
 const SOURCE_COLORS = {
@@ -81,6 +82,7 @@ const SOURCE_COLORS = {
   cpfint: 'badge--green',
   plateint: 'badge--gold',
   ipdomainint: 'badge--purple',
+  crossintel: 'badge--cyan',
 };
 
 const SOURCE_LABELS = {
@@ -93,6 +95,7 @@ const SOURCE_LABELS = {
   cpfint: 'CPF Intel',
   plateint: 'Placa Intel',
   ipdomainint: 'IP/Domínio Intel',
+  crossintel: 'Dossiê Cruzado',
 };
 
 // ---------------------------------------------------------------------------
@@ -302,6 +305,14 @@ function renderValue(value) {
       linkLabel = '📞 ABR Telecom (Portabilidade Oficial) ↗';
       btnClass = 'text-amber border-amber/30 bg-amber/10 hover:bg-amber/20';
       explanation = 'Base oficial em tempo real da ABR Telecom para checar a operadora atualizada de linhas portadas (Claro, TIM, Vivo).';
+    } else if (str.includes('registrato.bcb.gov.br')) {
+      linkLabel = '🏛️ Banco Central (Registrato / Contas & PIX) ↗';
+      btnClass = 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20';
+      explanation = 'Sistema oficial do Banco Central do Brasil para emitir relatório de todas as contas bancárias e chaves PIX ativas no CPF (Requer gov.br).';
+    } else if (str.includes('haveibeenpwned')) {
+      linkLabel = '🛡️ HaveIBeenPwned (Checagem de Vazamentos) ↗';
+      btnClass = 'text-rose-400 border-rose-400/30 bg-rose-400/10 hover:bg-rose-400/20';
+      explanation = 'Verifica se o e-mail ou credenciais já foram expostos em grandes incidentes de segurança públicos conhecidos na internet.';
     } else if (str.includes('wa.me')) {
       linkLabel = '💬 Conversar no WhatsApp ↗';
       btnClass = 'text-success border-success/30 bg-success/10 hover:bg-success/20';

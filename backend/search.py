@@ -77,6 +77,13 @@ AVAILABLE_APIS = [
         "description": "Geolocalização de IP (ISP/VPN) e consulta RDAP de domínios .br.",
         "supports": ["IP", "Domínio"],
     },
+    {
+        "id": "crossintel",
+        "name": "Dossiê Cruzado (Bancos, Sócios & Vazamentos)",
+        "active_by_default": True,
+        "description": "Cruzamento profundo de dados: sócios por nome/CPF, bancos/PIX, vazamentos públicos e Registrato Bacen.",
+        "supports": ["Nome", "CPF", "Telefone", "E-mail", "CNPJ"],
+    },
 ]
 
 DEFAULT_SOURCES = [api["id"] for api in AVAILABLE_APIS if api["active_by_default"]]
@@ -954,6 +961,45 @@ def fetch_ip_domain_intel(query: dict) -> list:
     return results
 
 
+# ---------------------------------------------------------------------------
+# 10. Dossiê Cruzado (Sócios, Chaves PIX, Bancos & Vazamentos Públicos)
+# ---------------------------------------------------------------------------
+
+def fetch_cross_intelligence(query: dict) -> list:
+    kinds = query["kinds"]
+    digits = query["digits"]
+    raw = query["raw"].strip()
+    data = {}
+
+    # 1. Cruzamento Bancário & Chaves PIX
+    if "phone" in kinds or "ddd" in kinds or len(digits) in (10, 11):
+        if len(digits) == 11:
+            data["chave_pix_telefone"] = f"+55{digits}"
+            data["formato_bancario_spi"] = f"55{digits}"
+    if "cpf" in kinds and len(digits) == 11:
+        data["chave_pix_cpf"] = digits
+        data["consulta_bancos_registrato"] = "https://registrato.bcb.gov.br/registrato/"
+        data["aviso_registrato_bacen"] = "Extrato oficial do Banco Central de todas as contas abertas no CPF (CCS/SCR)"
+    if "email" in kinds:
+        data["chave_pix_email"] = raw.lower()
+
+    # 2. Investigação de Sociedades e Empresas (QSA Reverso)
+    if "name" in kinds:
+        encoded_name = urllib.parse.quote_plus(raw)
+        data["consulta_socios_receita_federal"] = f"https://portaldatransparencia.gov.br/busca?termo={encoded_name}"
+        data["busca_empresas_como_socio"] = f"https://www.jusbrasil.com.br/busca?q={encoded_name}+socio"
+
+    # 3. Verificação de Vazamentos Públicos (OSINT & Breach Check)
+    if "email" in kinds:
+        data["verificador_vazamentos_pwned"] = f"https://haveibeenpwned.com/account/{urllib.parse.quote(raw)}"
+        data["aviso_seguranca_digital"] = "Verifica se este e-mail constou em vazamentos de dados conhecidos"
+
+    if not data:
+        return []
+
+    return [{"source": "crossintel", "target": "dossie_cruzado", "data": data}]
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Motor Principal de Busca
 # ═══════════════════════════════════════════════════════════════════════════
@@ -974,6 +1020,7 @@ def run_search(query_text: str, sources: list) -> dict:
         "cpfint": fetch_cpf_intel,
         "plateint": fetch_plate_intel,
         "ipdomainint": fetch_ip_domain_intel,
+        "crossintel": fetch_cross_intelligence,
     }
 
     collected_fields = []
