@@ -6,8 +6,8 @@ import HelpModal from './HelpModal';
 import AdminDashboard from './AdminDashboard';
 import './styles/index.css';
 
-const APP_VERSION = 'v3.3.0';
-const APP_BUILD_TIME = '23/08 às 20:50';
+const APP_VERSION = 'v3.5.0';
+const APP_BUILD_TIME = '24/08 às 18:15';
 const SESSION_KEY = 'painel_auth_session';
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 horas de sessão contínua
 
@@ -91,6 +91,7 @@ const DEFAULT_APIS = [
   { id: 'minhareceita', name: 'Minha Receita (CNPJ & Sócios)', supports: ['CNPJ', 'Sócios/QSA', 'CNAE', 'Capital'] },
   { id: 'receitaws', name: 'ReceitaWS', supports: ['CNPJ'] },
   { id: 'brasilapi', name: 'BrasilAPI', supports: ['CNPJ', 'CEP', 'DDD', 'Feriados'] },
+  { id: 'bankint', name: 'Bancos & SPI (Bacen / COMPE)', supports: ['Bancos', 'ISPB', 'COMPE', 'Pix'] },
   { id: 'nameint', name: 'Nome Intel (Pessoas & Diários)', supports: ['Nome', 'GitHub', 'Transparência', 'Jusbrasil', 'SUS', 'Discord'] },
   { id: 'phoneint', name: 'Telefone Intel', supports: ['Operadora', 'Portabilidade', 'ABR Telecom', 'WhatsApp', 'Telegram', 'Truecaller', 'SUS'] },
   { id: 'emailint', name: 'E-mail Intel', supports: ['Gravatar', 'GitHub', 'MX DNS', 'Anti-Spam'] },
@@ -98,12 +99,20 @@ const DEFAULT_APIS = [
   { id: 'plateint', name: 'Placa Intel', supports: ['Mercosul', 'Denatran UF'] },
   { id: 'ipdomainint', name: 'IP/Domínio Intel', supports: ['Geolocalização', 'Registro.br RDAP', 'ISP'] },
   { id: 'crossintel', name: 'Dossiê Cruzado (Bancos, Sócios & Vazamentos)', supports: ['Bancos', 'PIX', 'Sócios', 'Vazamentos', 'Registrato'] },
+  { id: 'ibgeint', name: 'IBGE (Demografia & Municípios)', supports: ['População', 'Microrregião', 'Perfil Municipal'] },
+  { id: 'weatherint', name: 'Clima em Tempo Real (Open-Meteo)', supports: ['Temperatura', 'Umidade', 'Vento'] },
+  { id: 'geoint', name: 'Geolocalização (OpenStreetMap)', supports: ['GPS', 'Mapa', 'Endereço'] },
+  { id: 'econint', name: 'Indicadores Econômicos (Bacen & Câmbio)', supports: ['SELIC', 'IPCA', 'Dólar', 'Euro'] },
+  { id: 'cryptoint', name: 'Criptomoedas (CoinGecko)', supports: ['Preço', 'Market Cap', 'Volume'] },
+  { id: 'countryint', name: 'Países (REST Countries)', supports: ['Bandeira', 'População', 'Moedas', 'Idiomas'] },
+  { id: 'vaultint', name: '📂 Base Local (Data Vault)', supports: ['PDF', 'TXT', 'CSV', 'JSON', 'SQL'] },
 ];
 
 const SOURCE_COLORS = {
   minhareceita: 'badge--cyan',
   receitaws: 'badge--blue',
   brasilapi: 'badge--green',
+  bankint: 'badge--gold',
   nameint: 'badge--purple',
   phoneint: 'badge--cyan',
   emailint: 'badge--gold',
@@ -111,12 +120,21 @@ const SOURCE_COLORS = {
   plateint: 'badge--gold',
   ipdomainint: 'badge--purple',
   crossintel: 'badge--cyan',
+  ibgeint: 'badge--blue',
+  weatherint: 'badge--green',
+  geoint: 'badge--purple',
+  econint: 'badge--gold',
+  cryptoint: 'badge--cyan',
+  countryint: 'badge--blue',
+  vault: 'badge--vault',
+  vaultint: 'badge--vault',
 };
 
 const SOURCE_LABELS = {
   minhareceita: 'Minha Receita',
   receitaws: 'ReceitaWS',
   brasilapi: 'BrasilAPI',
+  bankint: 'Bancos & SPI',
   nameint: 'Nome Intel',
   phoneint: 'Telefone Intel',
   emailint: 'E-mail Intel',
@@ -124,6 +142,14 @@ const SOURCE_LABELS = {
   plateint: 'Placa Intel',
   ipdomainint: 'IP/Domínio Intel',
   crossintel: 'Dossiê Cruzado',
+  ibgeint: 'IBGE Oficial',
+  weatherint: 'Clima ao Vivo',
+  geoint: 'Geolocalização',
+  econint: 'Banco Central',
+  cryptoint: 'CoinGecko',
+  countryint: 'Geopolítica',
+  vault: 'Base Local',
+  vaultint: 'Base Local',
 };
 
 // ---------------------------------------------------------------------------
@@ -291,14 +317,143 @@ function describeSearchError(error) {
 // ---------------------------------------------------------------------------
 
 function formatLabel(key) {
+  const customLabels = {
+    razao_social: 'Razão Social',
+    nome_fantasia: 'Nome Fantasia',
+    cnpj: 'CNPJ',
+    cpf: 'CPF',
+    situacao_cadastral: 'Situação Cadastral',
+    data_abertura: 'Data de Abertura',
+    capital_social: 'Capital Social',
+    porte: 'Porte da Empresa',
+    natureza_juridica: 'Natureza Jurídica',
+    cnae_principal: 'Atividade Principal (CNAE)',
+    quadro_de_socios_qsa: 'Quadro Societário & Sócios (QSA)',
+    regiao_fiscal: 'Região Fiscal (Receita)',
+    validador_matematico_cpf: 'Validação de Dígitos (CPF)',
+    endereco_completo: 'Endereço Completo',
+    logradouro: 'Logradouro',
+    numero: 'Número',
+    bairro: 'Bairro',
+    municipio: 'Município / Cidade',
+    uf: 'Estado (UF)',
+    cep: 'CEP',
+    coordenadas_gps: 'Coordenadas GPS',
+    google_maps: 'Localização no Google Maps',
+    openstreetmap: 'Mapa Interativo OpenStreetMap',
+    codigo_ibge: 'Código IBGE Municipal',
+    populacao_estimada: 'População Estimada (IBGE)',
+    microrregiao: 'Microrregião (IBGE)',
+    mesorregiao: 'Mesorregião (IBGE)',
+    regiao_geografica_imediata: 'Região Imediata (IBGE)',
+    temperatura_atual: 'Temperatura Atual',
+    sensacao_termica: 'Sensação Térmica',
+    umidade_relativa: 'Umidade do Ar',
+    condicao_climatica: 'Condição do Clima em Tempo Real',
+    velocidade_do_vento: 'Velocidade do Vento',
+    pressao_atmosferica: 'Pressão Atmosférica',
+    banco: 'Instituição Bancária',
+    codigo_banco: 'Código de Compensação (COMPE)',
+    ispb: 'Código ISPB (Banco Central)',
+    chave_pix_cpf: 'Chave PIX Provável (CPF)',
+    chave_pix_cnpj: 'Chave PIX Provável (CNPJ)',
+    chave_pix_telefone: 'Chave PIX Provável (Telefone)',
+    chave_pix_email: 'Chave PIX Provável (E-mail)',
+    formato_bancario_spi: 'Identificador Bancário SPI',
+    relatorio_contas_pix_registrato: 'Contas & Chaves PIX (Registrato Bacen)',
+    selic_meta_atual: 'Taxa SELIC Meta Atual',
+    ipca_mensal: 'Inflação Oficial (IPCA Mensal)',
+    ipca_acumulado_12_meses: 'IPCA Acumulado (12 Meses)',
+    cdi_diario: 'Taxa CDI',
+    dolar_comercial: 'Cotação Dólar Comercial',
+    dolar_venda: 'Dólar Venda',
+    euro_comercial: 'Cotação Euro Comercial',
+    euro_venda: 'Euro Venda',
+    preco_brl: 'Preço em Reais (BRL)',
+    preco_usd: 'Preço em Dólar (USD)',
+    market_cap_usd: 'Valor de Mercado (Market Cap)',
+    variacao_24h: 'Variação 24 Horas',
+    variacao_7d: 'Variação 7 Dias',
+    variacao_30d: 'Variação 30 Dias',
+    investigacao_societaria_qsa: 'Investigação Societária e Vínculos',
+    consulta_socios_receita_federal: 'Sócios na Transparência Federal',
+    pesquisa_processual_unificada_tribunais: 'Processos Judiciais (Tribunais)',
+    processos_escavador: 'Processos e Menções (Escavador)',
+    diarios_oficiais_municipais: 'Diários Oficiais dos Municípios',
+    diarios_oficiais_e_concursos_dou: 'Diário Oficial da União (DOU)',
+    comprovante_situacao_cadastral_rfb: 'Comprovante Oficial (Receita Federal)',
+    regularidade_fiscal_divida_ativa_pgfn: 'Dívida Ativa da União (PGFN / Regularize)',
+    portal_da_transparencia: 'Portal da Transparência Federal',
+    telefone: 'Telefone de Contato',
+    operadora: 'Operadora de Telefonia',
+    whatsapp_link: 'Conversa Direta no WhatsApp',
+    telegram_link: 'Perfil no Telegram',
+    truecaller_identificador: 'Identificador Truecaller',
+    syncme_identificador: 'Identificador Sync.me',
+    email: 'E-mail de Contato',
+    verificador_vazamentos_pwned: 'Checagem de Vazamentos (HaveIBeenPwned)',
+    perfil_github: 'Perfil de Desenvolvedor no GitHub',
+    perfil_linkedin: 'Perfil Profissional no LinkedIn',
+    servidores_de_email_mx: 'Servidores de E-mail (DNS MX)',
+    foto_perfil_gravatar: 'Foto de Perfil Pública (Gravatar)',
+    tipo_de_email: 'Classificação do E-mail',
+  };
+
+  if (customLabels[key]) return customLabels[key];
+
   return key
+    .replace(/^base_local_/, '📂 Base Local: ')
     .replace(/[._]/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function renderValue(value) {
+function renderValue(value, key = '') {
   if (value === null || value === undefined) return '—';
   const str = String(value);
+
+  // Mini-Mapa Interativo Embutido (quando coordenadas GPS)
+  if (key === 'coordenadas_gps' || (str.includes(',') && str.split(',').length === 2 && !isNaN(parseFloat(str.split(',')[0])) && !isNaN(parseFloat(str.split(',')[1])) && Math.abs(parseFloat(str.split(',')[0])) <= 90)) {
+    const parts = str.split(',');
+    const lat = parseFloat(parts[0].trim());
+    const lon = parseFloat(parts[1].trim());
+    if (!isNaN(lat) && !isNaN(lon)) {
+      const bbox = `${lon - 0.008},${lat - 0.005},${lon + 0.008},${lat + 0.005}`;
+      const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat}%2C${lon}`;
+      return (
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-primary font-semibold">📍 GPS: {lat.toFixed(6)}, {lon.toFixed(6)}</span>
+          </div>
+          <div className="w-full h-44 rounded-xl overflow-hidden border border-white/15 shadow-md relative bg-surface">
+            <iframe
+              title="Mini-Mapa OpenStreetMap"
+              src={embedUrl}
+              className="w-full h-full border-0"
+              loading="lazy"
+            />
+          </div>
+          <div className="flex items-center gap-2 pt-0.5">
+            <a
+              href={`https://www.google.com/maps?q=${lat},${lon}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-emerald-400/30 bg-emerald-400/10 text-emerald-400 text-[10px] font-medium hover:bg-emerald-400/20"
+            >
+              📍 Abrir no Google Maps ↗
+            </a>
+            <a
+              href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-primary/30 bg-primary/10 text-primary text-[10px] font-medium hover:bg-primary/20"
+            >
+              🗺️ Ver no OpenStreetMap ↗
+            </a>
+          </div>
+        </div>
+      );
+    }
+  }
 
   // Imagens de avatar
   if (str.startsWith('http') && (str.includes('avatar') || str.includes('gravatar') || str.endsWith('.png') || str.endsWith('.jpg'))) {
@@ -315,6 +470,36 @@ function renderValue(value) {
     );
   }
 
+  // SVG Flags / Coat of Arms (REST Countries)
+  if (str.startsWith('http') && str.endsWith('.svg') && (str.includes('flag') || str.includes('coatofarms'))) {
+    const isFlag = str.includes('flag');
+    return (
+      <div className="flex items-center gap-3 py-1">
+        <img
+          src={str}
+          alt={isFlag ? 'Bandeira' : 'Brasão de Armas'}
+          className={isFlag
+            ? 'w-16 h-auto rounded-md border border-white/15 shadow-md'
+            : 'w-14 h-auto rounded-lg'}
+          loading="lazy"
+        />
+        <a href={str} target="_blank" rel="noreferrer" className="text-[10px] text-primary hover:underline font-mono">
+          {isFlag ? 'Bandeira SVG ↗' : 'Brasão SVG ↗'}
+        </a>
+      </div>
+    );
+  }
+
+  // Crypto logos (CoinGecko large images)
+  if (str.startsWith('http') && str.includes('coingecko') && str.includes('/large/')) {
+    return (
+      <div className="flex items-center gap-3 py-1">
+        <img src={str} alt="Logo criptoativo" className="w-12 h-12 rounded-full border border-primary/30 shadow-glow" loading="lazy" />
+        <span className="text-[10px] text-ink-faint font-mono">Logo oficial via CoinGecko</span>
+      </div>
+    );
+  }
+
   // Links clicáveis com legendas explicativas completas
   if (str.startsWith('http://') || str.startsWith('https://')) {
     let linkLabel = 'Abrir link oficial ↗';
@@ -324,55 +509,55 @@ function renderValue(value) {
     if (str.includes('conectesus')) {
       linkLabel = '🏥 ConecteSUS / Ministério da Saúde ↗';
       btnClass = 'text-cyan-400 border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20';
-      explanation = 'Requer login na conta gov.br para acessar o Cartão Nacional de Saúde (CNS), vacinas e histórico do SUS.';
+      explanation = 'Acesso ao Cartão Nacional de Saúde (CNS), vacinas e histórico do SUS (Requer gov.br).';
     } else if (str.includes('receitafederal')) {
-      linkLabel = '🏛️ Receita Federal (Comprovante CPF) ↗';
+      linkLabel = '🏛️ Receita Federal (Comprovante Oficial) ↗';
       btnClass = 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20';
-      explanation = 'Consulta pública oficial da Receita Federal para verificar a situação cadastral e emitir o comprovante de inscrição do CPF.';
+      explanation = 'Consulta pública oficial da Receita Federal para emitir o comprovante de situação cadastral.';
     } else if (str.includes('consultanumero.abrtelecom')) {
       linkLabel = '📞 ABR Telecom (Portabilidade Oficial) ↗';
       btnClass = 'text-amber border-amber/30 bg-amber/10 hover:bg-amber/20';
-      explanation = 'Base oficial em tempo real da ABR Telecom para checar a operadora atualizada de linhas portadas (Claro, TIM, Vivo).';
+      explanation = 'Base em tempo real da ABR Telecom para checar a operadora atualizada de linhas portadas.';
     } else if (str.includes('registrato.bcb.gov.br')) {
       linkLabel = '🏛️ Banco Central (Registrato / Contas & PIX) ↗';
       btnClass = 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20';
-      explanation = 'Sistema oficial do Banco Central do Brasil para emitir relatório de todas as contas bancárias e chaves PIX ativas no CPF (Requer gov.br).';
+      explanation = 'Sistema oficial do Banco Central do Brasil para emitir relatório de todas as contas bancárias e chaves PIX ativas.';
     } else if (str.includes('haveibeenpwned')) {
       linkLabel = '🛡️ HaveIBeenPwned (Checagem de Vazamentos) ↗';
       btnClass = 'text-rose-400 border-rose-400/30 bg-rose-400/10 hover:bg-rose-400/20';
-      explanation = 'Verifica se o e-mail ou credenciais já foram expostos em grandes incidentes de segurança públicos conhecidos na internet.';
+      explanation = 'Verifica se o e-mail ou credenciais já foram expostos em incidentes públicos de segurança na internet.';
     } else if (str.includes('wa.me')) {
-      linkLabel = '💬 Conversar no WhatsApp ↗';
+      linkLabel = '💬 Iniciar Conversa no WhatsApp ↗';
       btnClass = 'text-success border-success/30 bg-success/10 hover:bg-success/20';
-      explanation = 'Inicia conversa direta no WhatsApp ou WhatsApp Web sem precisar adicionar o número à agenda de contatos.';
+      explanation = 'Inicia conversa direta no WhatsApp ou WhatsApp Web sem precisar adicionar o número à agenda.';
     } else if (str.includes('t.me')) {
       linkLabel = '✈️ Abrir no Telegram ↗';
       btnClass = 'text-cyan-400 border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20';
-      explanation = 'Localiza perfil ou canal vinculado a este número de telefone no aplicativo Telegram.';
+      explanation = 'Localiza perfil ou canal vinculado a este número no Telegram.';
     } else if (str.includes('truecaller')) {
       linkLabel = '📞 Consultar no Truecaller ↗';
       btnClass = 'text-blue-400 border-blue-400/30 bg-blue-400/10 hover:bg-blue-400/20';
-      explanation = 'Identificador comunitário de chamadas para verificar o nome informado por outros usuários e a operadora recente.';
+      explanation = 'Identificador comunitário de chamadas para checar o nome informado por outros usuários.';
     } else if (str.includes('sync.me')) {
       linkLabel = '🔍 Consultar no Sync.me ↗';
       btnClass = 'text-indigo-400 border-indigo-400/30 bg-indigo-400/10 hover:bg-indigo-400/20';
-      explanation = 'Identificador de chamadas colaborativo e busca de redes sociais associadas ao número.';
+      explanation = 'Identificador de chamadas colaborativo e busca de redes sociais associadas.';
     } else if (str.includes('github.com')) {
       linkLabel = '🐙 Perfil no GitHub ↗';
       btnClass = 'text-primary border-primary/30 bg-primary/10 hover:bg-primary/20';
       explanation = 'Perfil público de desenvolvedor com foto, biografia, empresa e repositórios abertos.';
     } else if (str.includes('portaldatransparencia')) {
-      linkLabel = '🏛️ Portal da Transparência ↗';
+      linkLabel = '🏛️ Portal da Transparência Federal ↗';
       btnClass = 'text-cyan-400 border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20';
-      explanation = 'Base do Governo Federal para consulta de servidores públicos, Pessoas Expostas Politicamente (PEP) e benefícios.';
+      explanation = 'Base oficial do Governo Federal para consulta de servidores públicos, PEP e benefícios.';
     } else if (str.includes('in.gov.br')) {
       linkLabel = '📰 Diário Oficial da União (DOU) ↗';
       btnClass = 'text-purple-400 border-purple-400/30 bg-purple-400/10 hover:bg-purple-400/20';
-      explanation = 'Consulta de publicações de concursos públicos, nomeações, licitações e atos oficiais da União.';
+      explanation = 'Consulta de publicações de concursos públicos, nomeações, licitações e atos da União.';
     } else if (str.includes('regularize.pgfn.gov.br')) {
-      linkLabel = '🏛️ Regularidade Fiscal & Dívida Ativa (PGFN) ↗';
+      linkLabel = '🏛️ Dívida Ativa da União (PGFN / Regularize) ↗';
       btnClass = 'text-amber border-amber/30 bg-amber/10 hover:bg-amber/20';
-      explanation = 'Consulta pública no portal REGULARIZE da Fazenda Nacional para checar débitos federais e certidões negativas na Dívida Ativa da União.';
+      explanation = 'Consulta pública no portal REGULARIZE da Fazenda Nacional para checar débitos e certidões negativas.';
     } else if (str.includes('queridodiario')) {
       linkLabel = '📰 Diários Oficiais dos Municípios ↗';
       btnClass = 'text-purple-400 border-purple-400/30 bg-purple-400/10 hover:bg-purple-400/20';
@@ -385,14 +570,18 @@ function renderValue(value) {
       linkLabel = '🔍 Busca no Escavador ↗';
       btnClass = 'text-indigo-400 border-indigo-400/30 bg-indigo-400/10 hover:bg-indigo-400/20';
       explanation = 'Busca de pessoas e publicações em diários oficiais e judiciais do Brasil.';
-    } else if (str.includes('discord')) {
-      linkLabel = '👾 Comunidade / Usuário no Discord ↗';
-      btnClass = 'text-indigo-400 border-indigo-400/30 bg-indigo-400/10 hover:bg-indigo-400/20';
-      explanation = 'Localizador de servidores e contas de usuários na plataforma Discord.';
-    } else if (str.includes('linkedin')) {
-      linkLabel = '💼 Buscar no LinkedIn ↗';
-      btnClass = 'text-blue-400 border-blue-400/30 bg-blue-400/10 hover:bg-blue-400/20';
-      explanation = 'Busca de histórico profissional e perfis corporativos no LinkedIn.';
+    } else if (str.includes('openstreetmap.org')) {
+      linkLabel = '🗺️ Ver no OpenStreetMap ↗';
+      btnClass = 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20';
+      explanation = 'Mapa interativo aberto completo com ruas, quadras e pontos de interesse.';
+    } else if (str.includes('coingecko.com')) {
+      linkLabel = '🪙 Ver no CoinGecko ↗';
+      btnClass = 'text-cyan-400 border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20';
+      explanation = 'Página do criptoativo com gráficos de preço ao vivo e dados de mercado.';
+    } else if (str.includes('google.com/maps')) {
+      linkLabel = '📍 Ver no Google Maps ↗';
+      btnClass = 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20';
+      explanation = 'Localização precisa no Google Maps com vista de satélite e Street View.';
     }
 
     return (
@@ -417,104 +606,198 @@ function renderValue(value) {
 }
 
 // ---------------------------------------------------------------------------
-// Components
+// Helpers de Automação (Cópia Formatada WhatsApp & Relatório PDF)
 // ---------------------------------------------------------------------------
 
-function ApiBadgeCard({ api, isActive }) {
-  return (
-    <div className={`api-card flex items-center justify-between gap-4 rounded-xl border p-3.5 transition-all ${
-      isActive ? 'border-primary/30 bg-surface/80' : 'border-white/5 bg-surface/30 opacity-60'
-    }`}>
-      <div className="flex items-center gap-3">
-        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isActive ? 'bg-success shadow-glow' : 'bg-ink-faint'}`} />
-        <div>
-          <p className="text-sm font-semibold text-ink">{api.name}</p>
-          <p className="text-xs text-ink-dim mt-0.5">{api.supports?.join(' · ')}</p>
-        </div>
-      </div>
-      <span className={`text-[11px] font-mono font-medium px-2 py-0.5 rounded-md border ${
-        isActive
-          ? 'bg-success/10 text-success border-success/20'
-          : 'bg-white/5 text-ink-faint border-white/10'
-      }`}>
-        {isActive ? 'Ativa' : 'Inativa'}
-      </span>
-    </div>
-  );
-}
-
-function SidebarApiBadges({ catalogApis, enabledApis }) {
-  return (
-    <div className="glass-panel rounded-2xl p-4 mt-4">
-      <p className="text-[10px] font-mono uppercase tracking-widest text-ink-dim mb-3">
-        Fontes ativas na sua conta ({enabledApis?.length || 0})
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {catalogApis.map((api) => {
-          const on = (enabledApis || []).includes(api.id);
-          return (
-            <span
-              key={api.id}
-              className={`inline-flex items-center gap-1.5 text-xs font-mono px-2.5 py-1 rounded-lg border transition-all ${
-                on
-                  ? 'border-primary/30 bg-primary/10 text-primary'
-                  : 'border-white/5 bg-surface/30 text-ink-faint line-through'
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${on ? 'bg-primary shadow-glow' : 'bg-ink-faint'}`} />
-              {api.name}
-            </span>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function ResultsStagePlaceholder() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[300px] h-full text-center px-6 py-12">
-      <div className="w-16 h-16 rounded-2xl bg-surface/80 border border-white/10 flex items-center justify-center text-primary mb-4 shadow-glow">
-        <IconSearch className="w-7 h-7 opacity-70" />
-      </div>
-      <h3 className="font-display text-lg font-semibold text-ink mb-1">Aguardando Consulta</h3>
-      <p className="text-xs text-ink-dim max-w-sm leading-relaxed">
-        Digite um Nome completo, CPF, CNPJ, Telefone com DDD, E-mail, Placa Mercosul ou IP/Domínio para iniciar a busca unificada.
-      </p>
-    </div>
-  );
-}
-
-function ResultsPanel({ results }) {
+function generateFormattedDossierText(query, results) {
   const fields = results?.fields || [];
-  const sources = results?.sources || [];
-  const queryType = results?.query?.kinds?.join(', ') || 'geral';
+  const sections = results?.sections || {};
+  let text = `╔═════════════════════════════════════════════════════════════╗\n`;
+  text += `   🛡️ PAINEL DE DADOS — DOSSIÊ INVESTIGATIVO 360°\n`;
+  text += `   📅 Gerado em: ${new Date().toLocaleString('pt-BR')} | 🔍 Termo: ${query}\n`;
+  text += `╚═════════════════════════════════════════════════════════════╝\n\n`;
 
-  if (!fields.length) {
+  const sectionTitles = {
+    highlights: '🌟 DESTAQUES & INTELIGÊNCIA CRUZADA',
+    identification: '🏢 IDENTIFICAÇÃO & CADASTRO OFICIAL',
+    banking: '🏦 BANCOS & INTELIGÊNCIA FINANCEIRA',
+    location: '📍 LOCALIZAÇÃO, DEMOGRAFIA & CLIMA',
+    legal: '⚖️ JURÍDICO, DIÁRIOS OFICIAIS & PROCESSOS',
+    digital: '🌐 PRESENÇA DIGITAL & CONTATOS',
+    vault: '📂 REGISTROS NO DATA VAULT LOCAL',
+  };
+
+  for (const [secKey, secFields] of Object.entries(sections)) {
+    if (!secFields || secFields.length === 0) continue;
+    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `${sectionTitles[secKey] || secKey.toUpperCase()}\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    for (const f of secFields) {
+      const label = formatLabel(f.key);
+      const val = String(f.value).trim();
+      const sources = (f.sources || []).map(s => SOURCE_LABELS[s] || s).join(', ');
+      text += `• ${label}: ${val} [Fonte: ${sources}]\n`;
+    }
+    text += `\n`;
+  }
+
+  text += `─────────────────────────────────────────────────────────────\n`;
+  text += `Relatório gerado pelo Painel de Dados v3.5.0 — Inteligência Avançada\n`;
+  return text;
+}
+
+function printDossierReport(query, results) {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+  const sections = results?.sections || {};
+  const fields = results?.fields || [];
+
+  let html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Dossiê Investigativo - ${query}</title>`;
+  html += `<style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #111; padding: 30px; line-height: 1.5; }
+    .header { border-bottom: 3px solid #0066cc; padding-bottom: 15px; margin-bottom: 25px; }
+    .header h1 { margin: 0; color: #0066cc; font-size: 24px; display: flex; align-items: center; gap: 8px; }
+    .header p { margin: 6px 0 0; font-size: 12px; color: #555; font-family: monospace; }
+    .section-title { background: #f1f5f9; border-left: 4px solid #0066cc; padding: 8px 14px; font-size: 14px; font-weight: bold; margin: 24px 0 10px; color: #0f172a; border-radius: 0 6px 6px 0; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+    th, td { border: 1px solid #cbd5e1; padding: 8px 12px; text-align: left; font-size: 12px; }
+    th { background: #f8fafc; font-weight: 600; width: 35%; color: #334155; }
+    .badge { display: inline-block; padding: 2px 6px; font-size: 10px; font-family: monospace; background: #e0f2fe; color: #0369a1; border-radius: 4px; margin-right: 4px; margin-top: 4px; }
+    .footer { margin-top: 40px; border-top: 1px solid #cbd5e1; padding-top: 10px; font-size: 11px; color: #64748b; text-align: center; }
+  </style></head><body>`;
+
+  html += `<div class="header">`;
+  html += `<h1>🛡️ Painel de Dados — Dossiê Investigativo 360°</h1>`;
+  html += `<p>Termo de Consulta: <strong>${query}</strong> | Emissão: ${new Date().toLocaleString('pt-BR')} | Total de Campos Validados: ${fields.length}</p>`;
+  html += `</div>`;
+
+  const sectionTitles = {
+    highlights: '🌟 Destaques & Inteligência Cruzada',
+    identification: '🏢 Identificação & Cadastro Oficial',
+    banking: '🏦 Bancos & Inteligência Financeira',
+    location: '📍 Localização, Demografia & Clima',
+    legal: '⚖️ Jurídico, Diários Oficiais & Processos',
+    digital: '🌐 Presença Digital & Contatos',
+    vault: '📂 Registros no Data Vault Local',
+  };
+
+  for (const [secKey, secFields] of Object.entries(sections)) {
+    if (!secFields || secFields.length === 0) continue;
+    html += `<div class="section-title">${sectionTitles[secKey] || secKey}</div>`;
+    html += `<table>`;
+    for (const f of secFields) {
+      const sourcesHtml = (f.sources || []).map(s => `<span class="badge">${SOURCE_LABELS[s] || s}</span>`).join('');
+      html += `<tr><th>${formatLabel(f.key)}</th><td>${String(f.value)} <div>${sourcesHtml}</div></td></tr>`;
+    }
+    html += `</table>`;
+  }
+
+  html += `<div class="footer">Documento emitido pelo Painel de Dados v3.5.0. Dados protegidos e para fins de auditoria investigativa.</div>`;
+  html += `<script>window.onload = function() { window.print(); };</script></body></html>`;
+
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
+// ---------------------------------------------------------------------------
+// ResultsPanel (com Barra de Automações, Abas de Seções e Cópia Rápida)
+// ---------------------------------------------------------------------------
+
+function ResultsPanel({ results, query }) {
+  const [activeSection, setActiveSection] = useState('all');
+  const [copiedFieldId, setCopiedFieldId] = useState(null);
+  const [dossierToast, setDossierToast] = useState('');
+
+  if (!results) return null;
+
+  const fields = results.fields || [];
+  const sections = results.sections || {};
+  const queryType = (results.query_types || []).join(', ') || 'geral';
+  const sources = results.sources_used || results.sources || [];
+
+  if (fields.length === 0) {
     return (
-      <div className="p-8 text-center flex flex-col items-center justify-center min-h-[260px]">
-        <p className="text-sm font-semibold text-amber mb-1">Nenhum registro retornado</p>
-        <p className="text-xs text-ink-dim max-w-md">
+      <div className="h-full flex flex-col items-center justify-center p-8 text-center text-ink-dim">
+        <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-ink-faint mb-3">
+          <IconAlert className="w-6 h-6" />
+        </div>
+        <p className="text-sm font-semibold text-ink">Nenhum dado encontrado</p>
+        <p className="text-xs text-ink-faint mt-1 max-w-sm">
           As fontes de dados consultadas não retornaram registros para este termo. Verifique o formato digitado.
         </p>
       </div>
     );
   }
 
+  // Filtragem por aba de seção
+  const displayedFields = activeSection === 'all'
+    ? fields
+    : (sections[activeSection] || []);
+
+  const sectionTabs = [
+    { id: 'all', label: '🌟 Todos', count: fields.length },
+    { id: 'highlights', label: '⚡ Destaques', count: sections.highlights?.length || 0 },
+    { id: 'identification', label: '🏢 Cadastro', count: sections.identification?.length || 0 },
+    { id: 'banking', label: '🏦 Bancos & PIX', count: sections.banking?.length || 0 },
+    { id: 'location', label: '📍 Localização', count: sections.location?.length || 0 },
+    { id: 'legal', label: '⚖️ Jurídico', count: sections.legal?.length || 0 },
+    { id: 'digital', label: '🌐 Digital', count: sections.digital?.length || 0 },
+    { id: 'vault', label: '📂 Base Local', count: sections.vault?.length || 0 },
+  ].filter(tab => tab.id === 'all' || tab.count > 0);
+
+  const handleCopyField = (field, idx) => {
+    const textToCopy = String(field.value);
+    navigator.clipboard?.writeText(textToCopy);
+    setCopiedFieldId(idx);
+    setTimeout(() => setCopiedFieldId(null), 1800);
+  };
+
+  const handleCopyFullDossier = () => {
+    const fullText = generateFormattedDossierText(query || results.query, results);
+    navigator.clipboard?.writeText(fullText);
+    setDossierToast('📋 Dossiê copiado com sucesso! Pronto para colar.');
+    setTimeout(() => setDossierToast(''), 3000);
+  };
+
   return (
-    <div className="h-full flex flex-col min-h-0 flex-1">
+    <div className="h-full flex flex-col min-h-0 flex-1 relative">
+      {/* Toast Notificação de Automação */}
+      {dossierToast && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-primary text-white text-xs font-semibold shadow-glow flex items-center gap-2 animate-bounce">
+          <span>{dossierToast}</span>
+        </div>
+      )}
+
       {/* Header Fixo dos Resultados */}
-      <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between flex-wrap gap-2 shrink-0 bg-surface/40">
+      <div className="px-4 sm:px-5 py-3 border-b border-white/10 flex items-center justify-between flex-wrap gap-2 shrink-0 bg-surface/60">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-success shadow-glow animate-pulse" />
-          <span className="text-xs font-mono uppercase tracking-wider text-ink font-semibold">
-            Resultado da Consulta
+          <span className="text-xs font-mono uppercase tracking-wider text-ink font-bold">
+            Dossiê Investigativo 360°
           </span>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/5 text-ink-dim">
             tipo: {queryType}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* ── BARRA DE AUTOMAÇÕES (1-CLIQUE) ── */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={handleCopyFullDossier}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/40 bg-primary/15 text-primary text-xs font-semibold hover:bg-primary/25 transition-all shadow-sm active:scale-95"
+            title="Copiar dossiê completo formatado para WhatsApp ou Bloco de Notas"
+          >
+            📋 Copiar Dossiê (WhatsApp)
+          </button>
+          <button
+            type="button"
+            onClick={() => printDossierReport(query || results.query, results)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-400/40 bg-emerald-400/15 text-emerald-400 text-xs font-semibold hover:bg-emerald-400/25 transition-all shadow-sm active:scale-95"
+            title="Gerar relatório formal timbrado em PDF para impressão ou download"
+          >
+            📥 Gerar PDF
+          </button>
           <span className="text-[11px] font-mono text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
             {sources.length} {sources.length === 1 ? 'fonte' : 'fontes'}
           </span>
@@ -524,37 +807,73 @@ function ResultsPanel({ results }) {
         </div>
       </div>
 
-      {/* Grid com Rolagem Perfeita e Suave */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5 pr-2 max-h-[calc(75vh-50px)]">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pb-4">
-          {fields.map((f, i) => {
-            const isWide = String(f.value).length > 35 || String(f.value).startsWith('http');
+      {/* Abas de Navegação por Seção de Inteligência */}
+      <div className="px-4 sm:px-5 py-2 border-b border-white/10 flex gap-1.5 overflow-x-auto shrink-0 bg-surface/30 no-scrollbar">
+        {sectionTabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveSection(tab.id)}
+            className={`px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              activeSection === tab.id
+                ? 'bg-primary/20 text-primary border border-primary/30 font-semibold shadow-inner'
+                : 'text-ink-dim hover:text-ink hover:bg-white/5 border border-transparent'
+            }`}
+          >
+            <span>{tab.label}</span>
+            <span className="text-[9px] font-mono opacity-80 px-1.5 py-0.2 rounded-full bg-white/10">
+              {tab.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Grid com Rolagem e Cards Consolidados */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-5 pr-2 max-h-[calc(75vh-90px)]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pb-20 sm:pb-6">
+          {displayedFields.map((f, i) => {
+            const isWide = String(f.value).length > 35 || String(f.value).startsWith('http') || f.key === 'coordenadas_gps';
+            const isCopied = copiedFieldId === i;
             return (
               <div
                 key={i}
-                className={`p-4 rounded-xl border border-white/10 bg-surface/60 hover:border-primary/40 transition-all shadow-sm ${
+                className={`p-4 rounded-xl border border-white/10 bg-surface/60 hover:border-primary/40 transition-all shadow-sm group relative ${
                   isWide ? 'sm:col-span-2' : ''
                 }`}
               >
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-[11px] font-mono uppercase text-ink-dim font-semibold tracking-wide">
+                  <span className="text-[11px] font-mono uppercase text-ink-dim font-bold tracking-wide">
                     {formatLabel(f.key)}
                   </span>
-                  <div className="flex gap-1 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* Selos de todas as fontes que confirmaram a informação */}
                     {(f.sources || []).map((src) => (
                       <span
                         key={src}
-                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
+                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-semibold ${
                           SOURCE_COLORS[src] || 'badge--blue'
                         }`}
                       >
                         {SOURCE_LABELS[src] || src}
                       </span>
                     ))}
+                    {/* Botão de Cópia Rápida Individual */}
+                    <button
+                      type="button"
+                      onClick={() => handleCopyField(f, i)}
+                      className="text-ink-dim hover:text-primary transition-all p-1 rounded-md hover:bg-white/5"
+                      title="Copiar este valor"
+                    >
+                      {isCopied ? (
+                        <span className="text-[10px] text-success font-mono font-bold">✓ Copiado!</span>
+                      ) : (
+                        <span className="text-xs opacity-70 group-hover:opacity-100">📋</span>
+                      )}
+                    </button>
                   </div>
                 </div>
                 <div className="text-sm text-ink font-medium break-words leading-relaxed">
-                  {renderValue(f.value)}
+                  {renderValue(f.value, f.key)}
                 </div>
               </div>
             );
@@ -602,6 +921,8 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState('perfil');
   const [settingsName, setSettingsName] = useState('');
+  const [nicknameStyle, setNicknameStyle] = useState('default');
+  const [settingsNicknameStyle, setSettingsNicknameStyle] = useState('default');
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState('');
   const [settingsError, setSettingsError] = useState('');
@@ -643,6 +964,8 @@ function App() {
       setUserName(saved.display_name || 'Usuário');
       setUserEmail(saved.email || '');
       setSettingsName(saved.display_name || '');
+      setNicknameStyle(saved.nickname_style || 'default');
+      setSettingsNicknameStyle(saved.nickname_style || 'default');
       setIsAdmin(Boolean(saved.is_admin));
       setAuthToken(saved.id_token || '');
       if (Array.isArray(saved.enabled_apis) && saved.enabled_apis.length) {
@@ -665,24 +988,33 @@ function App() {
     return () => clearInterval(interval);
   }, [sessionExpiresAt, isLogged]);
 
-  // 3. Animações de Entrada
+  // 3. Animações de Entrada (Completamente seguras para Android WebView)
   const animateDashboardEntry = useCallback(() => {
-    gsap.fromTo(
-      dashboardRef.current,
-      { opacity: 0, y: 32, filter: 'blur(8px)' },
-      { opacity: 1, y: 0, filter: 'blur(0px)', duration: 0.75, ease: 'power3.out' }
-    );
-    gsap.fromTo(
-      '.dashboard-stagger',
-      { opacity: 0, y: 20 },
-      { opacity: 1, y: 0, duration: 0.55, stagger: 0.09, ease: 'power2.out', delay: 0.12 }
-    );
-    if (greetingRef.current) {
+    try {
+      if (dashboardRef.current) {
+        gsap.fromTo(
+          dashboardRef.current,
+          { opacity: 0, y: 16 },
+          { opacity: 1, y: 0, duration: 0.45, ease: 'power2.out', clearProps: 'all' }
+        );
+      }
       gsap.fromTo(
-        greetingRef.current,
-        { opacity: 0, x: -12 },
-        { opacity: 1, x: 0, duration: 0.6, ease: 'power2.out', delay: 0.25 }
+        '.dashboard-stagger',
+        { opacity: 0, y: 12 },
+        { opacity: 1, y: 0, duration: 0.4, stagger: 0.06, ease: 'power2.out', delay: 0.05, clearProps: 'all' }
       );
+      if (greetingRef.current) {
+        gsap.fromTo(
+          greetingRef.current,
+          { opacity: 0, x: -8 },
+          { opacity: 1, x: 0, duration: 0.45, ease: 'power2.out', delay: 0.1, clearProps: 'all' }
+        );
+      }
+    } catch {
+      if (dashboardRef.current) {
+        dashboardRef.current.style.opacity = '1';
+        dashboardRef.current.style.transform = 'none';
+      }
     }
   }, []);
 
@@ -690,11 +1022,13 @@ function App() {
     if (isLogged && !isTransitioning) {
       animateDashboardEntry();
     } else if (!isLogged && !isTransitioning) {
-      gsap.fromTo(
-        cardRef.current,
-        { opacity: 0, y: 30, scale: 0.96 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'power3.out' }
-      );
+      try {
+        gsap.fromTo(
+          cardRef.current,
+          { opacity: 0, y: 20, scale: 0.98 },
+          { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'power2.out', clearProps: 'all' }
+        );
+      } catch {}
     }
   }, [isLogged, isTransitioning, animateDashboardEntry]);
 
@@ -797,6 +1131,8 @@ function App() {
     setUserName(data.display_name || 'Usuário');
     setUserEmail(data.email || email);
     setSettingsName(data.display_name || '');
+    setNicknameStyle(data.nickname_style || 'default');
+    setSettingsNicknameStyle(data.nickname_style || 'default');
     setIsAdmin(Boolean(data.is_admin));
     setAuthToken(data.id_token || '');
     if (Array.isArray(data.enabled_apis)) {
@@ -878,6 +1214,8 @@ function App() {
     setUserEmail('');
     setShowSettings(false);
     setSettingsName('');
+    setNicknameStyle('default');
+    setSettingsNicknameStyle('default');
     setSettingsMessage('');
     setSettingsError('');
     setIsAdmin(false);
@@ -890,6 +1228,7 @@ function App() {
 
   const openSettings = () => {
     setSettingsName(userName);
+    setSettingsNicknameStyle(nicknameStyle);
     setSettingsMessage('');
     setSettingsError('');
     setSettingsTab('perfil');
@@ -899,7 +1238,7 @@ function App() {
   };
 
   const handleSaveSettings = async (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
     setSettingsSaving(true);
     setSettingsMessage('');
     setSettingsError('');
@@ -907,16 +1246,19 @@ function App() {
       const response = await axios.patch(`${API}/profile`, {
         user_id: userId,
         display_name: settingsName.trim(),
+        nickname_style: settingsNicknameStyle,
         email: userEmail,
       });
-      const newName = response.data.display_name;
+      const newName = response.data.display_name || settingsName.trim();
+      const newStyle = response.data.nickname_style || settingsNicknameStyle;
       setUserName(newName);
-      setSettingsMessage('Apelido atualizado e salvo com sucesso!');
+      setNicknameStyle(newStyle);
+      setSettingsMessage('Apelido e personalização salvos com sucesso!');
 
       // Atualizar no localStorage imediatamente
       const stored = getStoredSession();
       if (stored) {
-        saveSession({ ...stored, display_name: newName });
+        saveSession({ ...stored, display_name: newName, nickname_style: newStyle });
       }
 
       gsap.fromTo('.settings-success', { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.35 });
@@ -975,6 +1317,7 @@ function App() {
 
   const settingsTabs = [
     { id: 'perfil', label: '👤 Perfil', desc: 'Apelido e nome exibido' },
+    { id: 'personalizacao', label: '🎨 Personalização', desc: 'Efeito RGB e temas do apelido' },
     { id: 'conta', label: '⏱️ Sessão & Conta', desc: 'Tempo restante e dados' },
     { id: 'apis', label: '⚡ Minhas APIs', desc: 'Fontes habilitadas' },
     { id: 'tickets', label: '📨 Meus Tickets', desc: 'Conversas de suporte', badge: userTickets.length },
@@ -987,10 +1330,10 @@ function App() {
 
   if (!isLogged) {
     return (
-      <div className="relative min-h-screen flex flex-col items-center justify-between p-4 sm:p-6 overflow-y-auto">
+      <div className="relative min-h-screen flex flex-col items-center justify-between px-4 py-6 pt-[max(1.5rem,calc(env(safe-area-inset-top,0px)+1.25rem))] pb-[max(1.5rem,calc(env(safe-area-inset-bottom,0px)+1rem))] overflow-y-auto">
         <div className="app-backdrop" aria-hidden />
 
-        <div className="w-full max-w-md my-auto pt-8 pb-6">
+        <div className="w-full max-w-md my-auto pt-4 pb-6">
           <div ref={cardRef} className="glass-panel rounded-3xl p-6 sm:p-8 relative border border-white/10 shadow-glow">
             {/* Header Brand */}
             <div className="flex items-center gap-3 mb-6">
@@ -1142,7 +1485,7 @@ function App() {
     <div className="relative min-h-screen flex flex-col justify-between overflow-y-auto">
       <div className="app-backdrop" aria-hidden />
 
-      <div ref={dashboardRef} className="dashboard-shell relative z-10 w-full px-4 sm:px-8 lg:px-12 py-6">
+      <div ref={dashboardRef} className="dashboard-shell relative z-10 w-full px-4 sm:px-8 lg:px-12 pt-[max(1.25rem,calc(env(safe-area-inset-top,0px)+1rem))] pb-6">
         {/* Topbar Greeting & Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 relative">
           <div ref={greetingRef} className="flex items-center gap-3.5">
@@ -1153,7 +1496,7 @@ function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="font-display text-2xl font-bold text-ink">
-                  Olá, <span className="text-primary">{userName || 'Usuário'}</span>
+                  Olá, <span className={`nickname--${nicknameStyle}`}>{userName || 'Usuário'}</span>
                 </h2>
                 {isAdmin && (
                   <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber/20 text-amber border border-amber/30">
@@ -1272,6 +1615,7 @@ function App() {
                 <div className="flex items-center justify-between mb-5">
                   <h3 className="font-display text-lg font-bold text-ink">
                     {settingsTab === 'perfil' && 'Perfil e Apelido'}
+                    {settingsTab === 'personalizacao' && 'Personalização & Efeitos Visuais'}
                     {settingsTab === 'conta' && 'Sessão e Dados da Conta'}
                     {settingsTab === 'apis' && 'Minhas Fontes de Dados'}
                     {settingsTab === 'tickets' && 'Meus Tickets de Suporte'}
@@ -1295,7 +1639,7 @@ function App() {
                         <IconUser className="w-4 h-4 text-ink-dim shrink-0" />
                         <input
                           type="text"
-                          placeholder="Ex: João, Gabriel, Rafael…"
+                          placeholder="Ex: RafzZ, Gabriel, Rafael…"
                           className="w-full bg-transparent text-sm text-ink placeholder:text-ink-faint outline-none"
                           value={settingsName}
                           onChange={(e) => setSettingsName(e.target.value)}
@@ -1308,7 +1652,7 @@ function App() {
                     <div className="rounded-xl border border-white/10 bg-surface/40 p-4">
                       <p className="text-[10px] font-mono uppercase tracking-wider text-ink-faint mb-1">Pré-visualização</p>
                       <p className="font-display text-xl font-bold text-ink">
-                        Olá, <span className="text-primary">{settingsName.trim() || '…'}</span>
+                        Olá, <span className={`nickname--${settingsNicknameStyle}`}>{settingsName.trim() || '…'}</span>
                       </p>
                     </div>
 
@@ -1334,6 +1678,125 @@ function App() {
                       Salvar Apelido
                     </button>
                   </form>
+                )}
+
+                {/* Aba 1.5: Personalização (RGB, Dourado, Cyberpunk, Rubi, Matrix, Ciano Padrão) */}
+                {settingsTab === 'personalizacao' && (
+                  <div className="space-y-5 max-w-lg">
+                    {/* Live Preview Box */}
+                    <div className="rounded-2xl border border-white/15 bg-surface/60 p-5 text-center relative overflow-hidden shadow-glow">
+                      <p className="text-[10px] font-mono uppercase tracking-widest text-ink-faint mb-1.5">Visualização em Tempo Real</p>
+                      <p className="font-display text-2xl sm:text-3xl font-bold text-ink py-1">
+                        Olá, <span className={`nickname--${settingsNicknameStyle}`}>{settingsName.trim() || userName || 'RafzZ'}</span>
+                      </p>
+                      <p className="text-xs text-ink-dim mt-1">
+                        Estilo selecionado: <strong className="text-ink">{
+                          {
+                            default: '💎 Ciano Neon (Padrão Oficial)',
+                            rgb: '🌈 RGB Gamer Animado (Cromático)',
+                            gold: '👑 Dourado Imperial (VIP)',
+                            cyberpunk: '🔮 Cyberpunk Magenta (Neon)',
+                            ruby: '🔥 Rubi Carmesim (Fogo)',
+                            matrix: '🌿 Matrix Hacker (Esmeralda)',
+                          }[settingsNicknameStyle] || 'Padrão'
+                        }</strong>
+                      </p>
+                    </div>
+
+                    {/* Grid de Seleção de Estilos */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[
+                        {
+                          id: 'default',
+                          name: '💎 Ciano Neon',
+                          desc: 'Identidade visual padrão limpa e futurista.',
+                          sampleClass: 'nickname--default',
+                          badge: 'Padrão',
+                        },
+                        {
+                          id: 'rgb',
+                          name: '🌈 RGB Gamer Animado',
+                          desc: 'Gradiente contínuo com ciclo de cores e brilho RGB.',
+                          sampleClass: 'nickname--rgb',
+                          badge: 'Animado',
+                        },
+                        {
+                          id: 'gold',
+                          name: '👑 Dourado Imperial',
+                          desc: 'Degradê dourado com brilho nobre.',
+                          sampleClass: 'nickname--gold',
+                          badge: 'VIP',
+                        },
+                        {
+                          id: 'cyberpunk',
+                          name: '🔮 Cyberpunk Magenta',
+                          desc: 'Gradiente neon roxo, magenta e ciano.',
+                          sampleClass: 'nickname--cyberpunk',
+                          badge: 'Neon',
+                        },
+                        {
+                          id: 'ruby',
+                          name: '🔥 Rubi Carmesim',
+                          desc: 'Tons vibrantes de rubi e fogo.',
+                          sampleClass: 'nickname--ruby',
+                          badge: 'Fogo',
+                        },
+                        {
+                          id: 'matrix',
+                          name: '🌿 Matrix Hacker',
+                          desc: 'Verde esmeralda cibernético futurista.',
+                          sampleClass: 'nickname--matrix',
+                          badge: 'Hacker',
+                        },
+                      ].map((theme) => {
+                        const isSelected = settingsNicknameStyle === theme.id;
+                        return (
+                          <div
+                            key={theme.id}
+                            onClick={() => setSettingsNicknameStyle(theme.id)}
+                            className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                              isSelected
+                                ? 'border-primary bg-primary/15 shadow-glow ring-1 ring-primary/40'
+                                : 'border-white/10 bg-surface/40 hover:bg-white/5 hover:border-white/20'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className={`text-sm font-bold ${theme.sampleClass}`}>
+                                {theme.name}
+                              </span>
+                              <span className={`text-[9px] font-mono px-2 py-0.5 rounded-full border ${
+                                isSelected
+                                  ? 'bg-primary/20 text-primary border-primary/40'
+                                  : 'bg-white/5 text-ink-faint border-white/10'
+                              }`}>
+                                {isSelected ? '✓ Ativo' : theme.badge}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-ink-dim leading-snug">
+                              {theme.desc}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {settingsMessage && (
+                      <div className="settings-success flex items-center gap-2 rounded-xl border border-success/30 bg-success/10 p-3 text-xs text-success">
+                        <IconCheck className="w-4 h-4 shrink-0" />
+                        <span>{settingsMessage}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleSaveSettings}
+                      disabled={settingsSaving}
+                      className="btn-primary w-full flex items-center justify-center gap-2 text-white font-semibold text-xs rounded-xl py-3 shadow-glow"
+                    >
+                      {settingsSaving ? <span className="spinner" /> : <IconCheck className="w-4 h-4" />}
+                      Salvar e Aplicar Tema
+                    </button>
+                  </div>
                 )}
 
                 {/* Aba 2: Conta & Sessão de 8 Horas */}
@@ -1550,8 +2013,8 @@ function App() {
                 <IconSearch className="w-[18px] h-[18px] text-ink-dim shrink-0" />
                 <input
                   type="text"
-                  placeholder="Nome, CPF, CNPJ, Telefone, E-mail, Placa, IP…"
-                  className="w-full bg-transparent text-ink placeholder:text-ink-faint text-sm outline-none"
+                  placeholder="Nome, CPF, CNPJ, Telefone, E-mail…"
+                  className="w-full bg-transparent text-ink placeholder:text-ink-faint text-xs sm:text-sm placeholder:truncate outline-none"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -1597,7 +2060,7 @@ function App() {
 
               {results && !isSearching && !searchError && (
                 <div className="relative z-10 h-full flex-1 flex flex-col min-h-0">
-                  <ResultsPanel results={results} />
+                  <ResultsPanel results={results} query={searchQuery} />
                 </div>
               )}
 
@@ -1738,7 +2201,7 @@ function App() {
       </div>
 
       {/* Rodapé de Versão no Dashboard */}
-      <footer className="w-full text-center py-4 text-[11px] font-mono text-ink-faint relative z-10">
+      <footer className="dashboard-footer w-full text-center py-4 pb-[max(2rem,env(safe-area-inset-bottom,2rem))] text-[11px] font-mono text-ink-faint relative z-10">
         Painel {APP_VERSION} · Atualizado em {APP_BUILD_TIME}
       </footer>
     </div>

@@ -1,5 +1,6 @@
 import os
 from typing import Optional
+from pathlib import Path
 import json
 import urllib.request
 import urllib.error
@@ -16,6 +17,13 @@ load_dotenv()
 
 FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY")
 ADMIN_EMAIL = (os.getenv("ADMIN_EMAIL") or "").strip().lower()
+
+# Auto-create Data Vault directory
+DATA_VAULT_DIR = Path(__file__).parent / "data_vault"
+DATA_VAULT_DIR.mkdir(exist_ok=True)
+
+# Supported vault file extensions
+VAULT_EXTENSIONS = {".pdf", ".txt", ".csv", ".json", ".sql", ".tsv", ".log"}
 
 
 # ── FastAPI ────────────────────────────────────────────────────────────────
@@ -68,6 +76,7 @@ def user_enabled_apis(uid: str) -> list:
             if src not in current and src in allowed:
                 merged.append(src)
         return merged
+    # Se o usuário não tem APIs configuradas, retorna TODAS ativas por padrão
     return DEFAULT_SOURCES[:]
 
 
@@ -204,11 +213,21 @@ async def login(request: Request):
 
     result = verify_password_with_firebase(email, password)
     uid = result["localId"]
-    display_name = result.get("displayName") or get_user_display_name(uid, email)
 
-    db.get_or_create_user(uid, email=email, display_name=display_name, is_admin=is_admin_email(email))
+    # PRIORIDADE: Banco SQLite local > Firebase > E-mail derivado
+    existing_user = db.get_user(uid)
+    if existing_user and existing_user.get("display_name") and existing_user["display_name"] != "Usuário":
+        display_name = existing_user["display_name"]
+    else:
+        display_name = result.get("displayName") or get_user_display_name(uid, email)
+
+    user = db.get_or_create_user(uid, email=email, display_name=display_name, is_admin=is_admin_email(email))
+    nickname_style = user.get("nickname_style", "default") if user else "default"
+
     write_activity(uid, "login", request=request)
-    return JSONResponse(session_payload(uid, email, display_name, result.get("idToken", "")))
+    payload = session_payload(uid, email, display_name, result.get("idToken", ""))
+    payload["nickname_style"] = nickname_style
+    return JSONResponse(payload)
 
 
 @app.post("/register")
@@ -227,13 +246,15 @@ async def register(request: Request):
     login_result = register_with_firebase_rest(email, password, display_name)
     uid = login_result.get("localId")
 
-    db.get_or_create_user(uid, email=email, display_name=display_name, is_admin=is_admin_email(email))
+    # Ativar TODAS as APIs por padrão para novos usuários
+    db.get_or_create_user(uid, email=email, display_name=display_name, is_admin=is_admin_email(email), enabled_apis=DEFAULT_SOURCES[:])
     write_activity(uid, "conta criada", request=request)
 
     payload = session_payload(
         uid, email, display_name, login_result.get("idToken", ""),
         extra={"status": "created"},
     )
+    payload["nickname_style"] = "default"
     return JSONResponse(payload)
 
 
@@ -246,12 +267,14 @@ async def get_profile(user_id: str):
             "display_name": user.get("display_name") or get_user_display_name(user_id, user.get("email")),
             "email": user.get("email", ""),
             "enabled_apis": user_enabled_apis(user_id),
+            "nickname_style": user.get("nickname_style", "default"),
         })
     return JSONResponse({
         "user": user_id,
         "display_name": get_user_display_name(user_id),
         "email": "",
         "enabled_apis": DEFAULT_SOURCES[:],
+        "nickname_style": "default",
     })
 
 
@@ -260,6 +283,7 @@ async def update_profile(request: Request):
     data = await request.json()
     user_id = data.get("user_id")
     display_name = (data.get("display_name") or "").strip()
+    nickname_style = data.get("nickname_style")
     email = data.get("email")
     if not user_id:
         raise HTTPException(status_code=400, detail="Usuário não identificado")
@@ -268,11 +292,25 @@ async def update_profile(request: Request):
             status_code=403,
             detail="Somente o administrador pode ativar ou desativar APIs de uma conta.",
         )
-    if not display_name:
-        raise HTTPException(status_code=400, detail="Informe um nome válido")
-    db.update_user_name(user_id, display_name)
-    write_activity(user_id, "atualizou apelido", {"display_name": display_name}, request)
-    return JSONResponse({"status": "updated", "user": user_id, "display_name": display_name})
+
+    result = {"status": "updated", "user": user_id}
+
+    if display_name:
+        db.update_user_name(user_id, display_name)
+        result["display_name"] = display_name
+        write_activity(user_id, "atualizou apelido", {"display_name": display_name}, request)
+
+    if nickname_style is not None:
+        valid_styles = {"default", "rgb", "gold", "cyberpunk", "ruby", "matrix"}
+        if nickname_style in valid_styles:
+            db.update_user_style(user_id, nickname_style)
+            result["nickname_style"] = nickname_style
+            write_activity(user_id, "atualizou estilo apelido", {"nickname_style": nickname_style}, request)
+
+    if not display_name and nickname_style is None:
+        raise HTTPException(status_code=400, detail="Informe um nome válido ou um estilo")
+
+    return JSONResponse(result)
 
 
 @app.get("/apis")
@@ -514,7 +552,43 @@ async def admin_reply_ticket(ticket_id: int, request: Request, authorization: Op
     return JSONResponse({"status": "replied", "ticket": updated})
 
 
+# ── Data Vault ─────────────────────────────────────────────────────────────
+
+@app.get("/admin/vault/files")
+async def admin_vault_files(authorization: Optional[str] = Header(None)):
+    _verify_admin_token(authorization)
+    files = []
+    for filepath in DATA_VAULT_DIR.rglob("*"):
+        if not filepath.is_file():
+            continue
+        if filepath.suffix.lower() not in VAULT_EXTENSIONS:
+            continue
+        if filepath.name.startswith(".") or filepath.name == "README.md":
+            continue
+        files.append({
+            "name": filepath.name,
+            "path": str(filepath.relative_to(DATA_VAULT_DIR)),
+            "size": filepath.stat().st_size,
+            "extension": filepath.suffix.lower(),
+        })
+    return JSONResponse({"files": files, "vault_dir": str(DATA_VAULT_DIR)})
+
+
+@app.delete("/admin/vault/files/{filename}")
+async def admin_vault_delete(filename: str, authorization: Optional[str] = Header(None)):
+    admin = _verify_admin_token(authorization)
+    filepath = DATA_VAULT_DIR / filename
+    if not filepath.exists() or not filepath.is_file():
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+    filepath.unlink()
+    write_activity(
+        admin.get("user_id", "admin"),
+        f"admin removeu arquivo do vault: {filename}",
+        {"filename": filename, "admin": admin.get("email")},
+    )
+    return JSONResponse({"status": "deleted", "filename": filename})
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run(app, host="0.0.0.0", port=port)
-

@@ -66,18 +66,17 @@ def init_db():
         """)
         
         # Migrações seguras de colunas existentes
-        try:
-            c.execute("ALTER TABLE tickets ADD COLUMN responses TEXT NOT NULL DEFAULT '[]'")
-        except Exception:
-            pass
-        try:
-            c.execute("ALTER TABLE tickets ADD COLUMN user_name TEXT NOT NULL DEFAULT 'Usuário'")
-        except Exception:
-            pass
-        try:
-            c.execute("ALTER TABLE tickets ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
-        except Exception:
-            pass
+        _safe_migrations = [
+            "ALTER TABLE tickets ADD COLUMN responses TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE tickets ADD COLUMN user_name TEXT NOT NULL DEFAULT 'Usuário'",
+            "ALTER TABLE tickets ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE users ADD COLUMN nickname_style TEXT NOT NULL DEFAULT 'default'",
+        ]
+        for migration in _safe_migrations:
+            try:
+                c.execute(migration)
+            except Exception:
+                pass
 
         c.commit()
         c.close()
@@ -117,6 +116,7 @@ def get_or_create_user(uid, email="", display_name="Usuário", enabled_apis=None
         )
         c.commit()
         c.close()
+    auto_save_backup()
     return get_user(uid) or {
         "uid": uid, "email": email, "display_name": display_name,
         "enabled_apis": enabled_apis or [],
@@ -132,7 +132,20 @@ def update_user_name(uid, display_name):
         c.execute("UPDATE users SET display_name = ?, updated_at = ? WHERE uid = ?", (display_name, now, uid))
         c.commit()
         c.close()
+    auto_save_backup()
     return display_name
+
+
+def update_user_style(uid, nickname_style):
+    """Atualiza o estilo visual do apelido do usuário."""
+    now = datetime.now().isoformat()
+    with _lock:
+        c = _conn()
+        c.execute("UPDATE users SET nickname_style = ?, updated_at = ? WHERE uid = ?", (nickname_style, now, uid))
+        c.commit()
+        c.close()
+    auto_save_backup()
+    return nickname_style
 
 
 def update_user_apis(uid, enabled_apis):
@@ -144,6 +157,7 @@ def update_user_apis(uid, enabled_apis):
         c.execute("UPDATE users SET enabled_apis = ?, updated_at = ? WHERE uid = ?", (apis, now, uid))
         c.commit()
         c.close()
+    auto_save_backup()
 
 
 def delete_user(uid):
@@ -155,6 +169,7 @@ def delete_user(uid):
         c.execute("DELETE FROM tickets WHERE user_id = ?", (uid,))
         c.commit()
         c.close()
+    auto_save_backup()
     return True
 
 
@@ -175,6 +190,7 @@ def _row_to_user(row):
     except Exception:
         d["enabled_apis"] = []
     d["is_admin"] = bool(d.get("is_admin", 0))
+    d["nickname_style"] = d.get("nickname_style", "default")
     return d
 
 
@@ -239,6 +255,7 @@ def create_ticket(user_id, user_email, category, message, user_name="Usuário"):
         c.commit()
         ticket_id = c.execute("SELECT last_insert_rowid()").fetchone()[0]
         c.close()
+    auto_save_backup()
     return {"id": ticket_id, "status": "aberto", "created_at": now, "responses": []}
 
 
@@ -296,6 +313,7 @@ def reply_ticket(ticket_id, sender_type, sender_name, message, new_status=None):
         c.commit()
         updated_row = c.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
         c.close()
+    auto_save_backup()
     return _row_to_ticket(updated_row) if updated_row else None
 
 
@@ -312,6 +330,7 @@ def update_ticket_status(ticket_id, status):
         c.commit()
         row = c.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
         c.close()
+    auto_save_backup()
     return _row_to_ticket(row) if row else None
 
 
@@ -324,6 +343,63 @@ def count_open_tickets():
     return row[0] if row else 0
 
 
+BACKUP_PATH = os.path.join(os.path.dirname(__file__), "persisted_backup.json")
+
+
+def auto_save_backup():
+    """Gera backup automático em JSON para persistência resiliente."""
+    try:
+        users = list_all_users()
+        tickets = list_tickets()
+        data = {
+            "users": users,
+            "tickets": tickets,
+            "saved_at": datetime.now().isoformat(),
+        }
+        with open(BACKUP_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def auto_restore_backup():
+    """Restaura automaticamente usuários e tickets caso o banco SQLite tenha sido resetado."""
+    if not os.path.exists(BACKUP_PATH):
+        return
+    try:
+        with open(BACKUP_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        users = data.get("users", [])
+        for u in users:
+            uid = u.get("uid")
+            if not uid:
+                continue
+            apis = json.dumps(u.get("enabled_apis", []))
+            with _lock:
+                c = _conn()
+                c.execute(
+                    "INSERT OR IGNORE INTO users (uid, email, display_name, enabled_apis, is_admin, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+                    (uid, u.get("email", ""), u.get("display_name", "Usuário"), apis, int(u.get("is_admin", False)), u.get("created_at", ""), u.get("updated_at", "")),
+                )
+                c.commit()
+                c.close()
+
+        # Restaura tickets se a tabela estiver vazia
+        with _lock:
+            c = _conn()
+            count = c.execute("SELECT COUNT(*) FROM tickets").fetchone()[0]
+            if count == 0:
+                for t in data.get("tickets", []):
+                    c.execute(
+                        "INSERT OR IGNORE INTO tickets (id, user_id, user_email, user_name, category, message, status, responses, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        (t.get("id"), t.get("user_id", ""), t.get("user_email", ""), t.get("user_name", "Usuário"), t.get("category", "bug"), t.get("message", ""), t.get("status", "aberto"), json.dumps(t.get("responses", []), ensure_ascii=False), t.get("created_at", ""), t.get("updated_at", "")),
+                    )
+                c.commit()
+            c.close()
+    except Exception:
+        pass
+
+
 def _row_to_ticket(row):
     """Converte sqlite3.Row em dict de ticket."""
     d = dict(row)
@@ -334,5 +410,6 @@ def _row_to_ticket(row):
     return d
 
 
-# Inicializa o banco de dados
+# Inicializa o banco de dados e restaura backup se disponível
 init_db()
+auto_restore_backup()
