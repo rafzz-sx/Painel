@@ -700,6 +700,75 @@ function printDossierReport(query, results) {
 }
 
 // ---------------------------------------------------------------------------
+// Componentes Auxiliares do Dashboard
+// ---------------------------------------------------------------------------
+
+function ApiBadgeCard({ api, isActive }) {
+  return (
+    <div className="flex items-center justify-between p-3.5 rounded-xl border border-white/10 bg-surface/40">
+      <div className="min-w-0 pr-2">
+        <p className="text-xs font-semibold text-ink truncate">{api.name}</p>
+        <p className="text-[10px] text-ink-dim truncate mt-0.5">{api.supports?.join(', ')}</p>
+      </div>
+      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full shrink-0 border ${
+        isActive
+          ? 'bg-success/20 text-success border-success/30'
+          : 'bg-white/5 text-ink-faint border-white/10'
+      }`}>
+        {isActive ? '✓ Ativa' : 'Desativada'}
+      </span>
+    </div>
+  );
+}
+
+function SidebarApiBadges({ catalogApis, enabledApis }) {
+  return (
+    <section className="dashboard-panel glass-panel rounded-2xl p-4 flex flex-col gap-2.5 mt-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-mono uppercase tracking-wider text-ink-dim font-bold">Fontes Ativas</p>
+        <span className="text-[10px] font-mono text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
+          {enabledApis.length} / {catalogApis.length}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5 max-h-56 overflow-y-auto pr-1 no-scrollbar">
+        {catalogApis.map((api) => {
+          const active = enabledApis.includes(api.id);
+          return (
+            <div
+              key={api.id}
+              className={`p-2 rounded-lg border text-[11px] flex items-center justify-between gap-1 transition-all ${
+                active
+                  ? 'border-white/10 bg-surface/60 text-ink'
+                  : 'border-transparent bg-white/5 text-ink-faint opacity-50'
+              }`}
+            >
+              <span className="truncate">{api.name.split('(')[0].trim()}</span>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? 'bg-success shadow-glow' : 'bg-white/20'}`} />
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ResultsStagePlaceholder() {
+  return (
+    <div className="relative z-10 flex flex-col items-center justify-center gap-4 text-center px-6 py-12">
+      <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/25 flex items-center justify-center text-primary shadow-glow">
+        <IconSearch className="w-8 h-8 opacity-80" />
+      </div>
+      <div>
+        <p className="font-display text-lg font-semibold text-ink">Central de Inteligência 360°</p>
+        <p className="text-xs text-ink-dim max-w-sm mt-1 leading-relaxed">
+          Digite um CPF, CNPJ, Nome, Telefone, E-mail, CEP, Placa ou Banco para cruzar bases oficiais em tempo real.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // ResultsPanel (com Barra de Automações, Abas de Seções e Cópia Rápida)
 // ---------------------------------------------------------------------------
 
